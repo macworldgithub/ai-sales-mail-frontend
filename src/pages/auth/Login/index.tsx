@@ -1,15 +1,35 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Form, Input, Button, Typography, message } from "antd";
+import { Form, Input, Button, Typography } from "antd";
 import toast from "react-hot-toast";
-
-const { Title, Text } = Typography;
+import axios from "axios"; // Import axios
+import { useNavigate } from "react-router-dom";
+const { Title } = Typography;
+import { SERVER_URL } from "../../../config/index";
 
 export default function Login() {
-  const onFinish = (values: any) => {
-    console.log("Login Details:", values);
-    toast.success("Login successful!");
+  const [loading, setLoading] = useState(false); // Loading state
+  const navigate = useNavigate();
+  const onFinish = async (values: any) => {
+    try {
+      setLoading(true);
+      const response = await axios.post(
+        `${SERVER_URL}/api/auth/login`, // Use environment variable for API URL
+        values
+      );
+
+      // Save token to localStorage
+      localStorage.setItem("x-ai-sales-mail-token", response.data.token);
+
+      toast.success("Login successful!");
+      navigate("/dashboard"); // Redirect to dashboard
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Login failed!");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -30,10 +50,7 @@ export default function Login() {
             name="email"
             rules={[
               { required: true, message: "Please enter your email!" },
-              {
-                type: "email",
-                message: "Please enter a valid email!",
-              },
+              { type: "email", message: "Please enter a valid email!" },
             ]}
           >
             <Input placeholder="Enter your email" size="large" />
@@ -50,12 +67,17 @@ export default function Login() {
             <Input.Password placeholder="Enter your password" size="large" />
           </Form.Item>
 
-          <Button type="primary" block size="large" htmlType="submit" className="mt-4">
-            Login
+          <Button
+            type="primary"
+            block
+            size="large"
+            htmlType="submit"
+            loading={loading} // Show loading state
+            className="mt-4"
+          >
+            {loading ? "Logging in..." : "Login"}
           </Button>
         </Form>
-
-     
       </motion.div>
     </div>
   );

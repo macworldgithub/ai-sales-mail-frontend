@@ -14,7 +14,11 @@ import {
 
 const { Header, Sider, Content } = Layout;
 
-export default function SidebarLayout({ children }: { children: React.ReactNode }) {
+export default function SidebarLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -28,7 +32,15 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       <Menu.Item key="settings" icon={<SettingOutlined />}>
         Settings
       </Menu.Item>
-      <Menu.Item key="logout" icon={<LogoutOutlined />} danger>
+      <Menu.Item
+        onClick={() => {
+          localStorage.clear();
+          navigate("/auth/login");
+        }}
+        key="logout"
+        icon={<LogoutOutlined />}
+        danger
+      >
         Logout
       </Menu.Item>
     </Menu>
@@ -76,7 +88,10 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
 
           {/* User Profile Dropdown */}
           <Dropdown overlay={userMenu} placement="bottomRight" arrow>
-            <Avatar size="large" className="cursor-pointer bg-white! text-blue-700! font-bold">
+            <Avatar
+              size="large"
+              className="cursor-pointer bg-white! text-blue-700! font-bold"
+            >
               A
             </Avatar>
           </Dropdown>
