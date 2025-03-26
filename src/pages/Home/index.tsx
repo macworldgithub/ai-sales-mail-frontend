@@ -88,7 +88,11 @@ export default function DashboardPage() {
           <Title level={4} className="text-white flex items-center gap-2">
             <BarChart size={18} /> Open Rate
           </Title>
-          <p className="text-3xl font-semibold"> {`${(((totalOpened) / totalEmailsSent) * 100).toFixed(2)}%`}</p>
+          <p className="text-3xl font-semibold">
+  {isNaN(totalOpened / totalEmailsSent) || !isFinite(totalOpened / totalEmailsSent)
+    ? "0.00%"
+    : `${((totalOpened / totalEmailsSent) * 100).toFixed(2)}%`}
+</p>
         </Card>
 
         <Card className="shadow-lg hover:shadow-xl transition-all bg-gradient-to-r from-yellow-400 to-orange-500 text-white">
