@@ -52,7 +52,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
       setEmailTemplateBody("");
     } else {
       const res = await axios.get(`${SERVER_URL}/templates/getById/${value}`,{headers:{
-        Authorization:token
+        Authorization: `Bearer ${token}` 
       }});
       if (res.status == 200) {
         setEmailTemplateBody(res.data.emailBody);
@@ -96,7 +96,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
               };
 
         const { data } = await axios.post(`${SERVER_URL}${endpoint}`, payload,{headers:{
-            Authorization:token
+            Authorization: `Bearer ${token}` 
           }});
 
         setEmailTemplateSubject(data.emailContent.subject);
@@ -124,7 +124,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
             emailClosing: emailTemplateClosing,
             promptTochange: promptToChagne,
           },{headers:{
-            Authorization:token
+            Authorization: `Bearer ${token}` 
           }});
   
           setEmailTemplateSubject(data.emailContent.subject);
@@ -168,7 +168,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
           emailBody: emailTemplateBody,
           emailClosing: emailTemplateClosing,
         },{headers:{
-            Authorization:token
+            Authorization: `Bearer ${token}` 
           }});
         if (res.status == 201 || res.status == 200) {
           toast.success("Template Saved SuccessFully");
@@ -180,7 +180,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
           emailBody: emailTemplateBody,
           emailClosing: emailTemplateClosing,
         },{headers:{
-            Authorization:token
+            Authorization: `Bearer ${token}` 
           }});
         if (res.status == 201 || res.status == 200) {
           toast.success("Template Updated SuccessFully");
@@ -194,7 +194,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
         description:campaignDescription,
         recipients:fileData
       },{headers:{
-        Authorization:token
+        Authorization: `Bearer ${token}` 
       }});
 
       setEmailTemplateSubject("");
@@ -224,7 +224,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
     setLoading(true);
     try {
       const res = await axios.get(`${SERVER_URL}/templates/getAll/names`,{headers:{
-        Authorization:token
+        Authorization: `Bearer ${token}` 
       }});
       setTemplates(res.data);
     } catch (error: any) {

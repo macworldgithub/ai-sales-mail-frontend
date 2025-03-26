@@ -24,10 +24,10 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const res = await axios.get(`${SERVER_URL}/campaigns/total`,{headers:{
-        Authorization:token
+        Authorization: `Bearer ${token}` 
       }});
       const templateRes = await axios.get(`${SERVER_URL}/templates/total`,{headers:{
-        Authorization:token
+        Authorization: `Bearer ${token}` 
       }});
 
       setTotalCampaigns(res.data.totalCampaigns);

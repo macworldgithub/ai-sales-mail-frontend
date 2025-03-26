@@ -60,7 +60,7 @@ export default function EmailCampaigns() {
     setLoading(true);
     try {
       const res = await axios.get(`${SERVER_URL}/campaigns/getAll?page=${page}`,{headers:{
-        Authorization:token
+        Authorization: `Bearer ${token}` 
       }});
       setCampaigns(res.data.campaigns);
       setTotal(res.data.total);
