@@ -4,12 +4,9 @@ import { Layout, Menu, Avatar, Dropdown } from "antd";
 import {
   DashboardOutlined,
   MailOutlined,
-  BarChartOutlined,
   SettingOutlined,
   LogoutOutlined,
   UserOutlined,
-  MenuUnfoldOutlined,
-  MenuFoldOutlined,
 } from "@ant-design/icons";
 
 const { Header, Sider, Content } = Layout;
@@ -53,7 +50,7 @@ export default function SidebarLayout({
         collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
-        className="bg-gray-900 fixed top-0 h-screen text-white shadow-lg"
+        className="bg-gray-900 fixed top-0 min-h-screen text-white shadow-lg"
       >
         <div className="h-16 flex items-center justify-center text-xl font-bold text-white">
           {!collapsed ? "AI SalesMail" : "AI"}
@@ -70,12 +67,12 @@ export default function SidebarLayout({
           <Menu.Item key="/email-campaigns" icon={<MailOutlined />}>
             Email Campaigns
           </Menu.Item>
-          <Menu.Item key="/analytics" icon={<BarChartOutlined />}>
+          {/* <Menu.Item key="/analytics" icon={<BarChartOutlined />}>
             Analytics
           </Menu.Item>
           <Menu.Item key="/settings" icon={<SettingOutlined />}>
             Settings
-          </Menu.Item>
+          </Menu.Item> */}
         </Menu>
       </Sider>
 

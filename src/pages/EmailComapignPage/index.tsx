@@ -1,16 +1,15 @@
-"use client";
-
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Layout, Table, Button, Input, Tag, Typography } from "antd";
 import {
   PlusOutlined,
   SearchOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  SendOutlined,
 } from "@ant-design/icons";
 import CreateCampaignModal from "../../components/CampaignModal";
+import { SERVER_URL } from "../../config";
+import toast from "react-hot-toast";
+import axios from "axios";
+import CustomLoader from "../../commons/CustomLoader";
 
 const { Content } = Layout;
 const { Title } = Typography;
@@ -18,44 +17,23 @@ const { Search } = Input;
 
 export default function EmailCampaigns() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const [campaigns, setCampaigns] = useState([
-    {
-      key: "1",
-      name: "Summer Sales Outreach",
-      status: "Sent",
-      emailsSent: 1200,
-      openRate: "65%",
-    },
-    {
-      key: "2",
-      name: "New Product Launch",
-      status: "Scheduled",
-      emailsSent: 500,
-      openRate: "Pending",
-    },
-    {
-      key: "3",
-      name: "Cold Outreach",
-      status: "Draft",
-      emailsSent: 0,
-      openRate: "N/A",
-    },
-  ]);
+  const [campaigns, setCampaigns] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
 
   // Status Tags
   const statusTag = (status: string) => {
     const color =
-      status === "Sent" ? "green" : status === "Scheduled" ? "blue" : "volcano";
-    return <Tag color={color}>{status}</Tag>;
+      status === "sent" ? "green" : status === "Scheduled" ? "blue" : "volcano";
+    return <Tag color={color}>{status.toUpperCase()}</Tag>;
   };
-
+console.log(campaigns,"campaigns")
   // Table Columns
   const columns = [
     {
       title: "Campaign Name",
-      dataIndex: "name",
-      key: "name",
+      dataIndex: "campaignName",
+      key: "campaignName",
     },
     {
       title: "Status",
@@ -65,30 +43,39 @@ export default function EmailCampaigns() {
     },
     {
       title: "Emails Sent",
-      dataIndex: "emailsSent",
-      key: "emailsSent",
+      dataIndex: "totalEmailSent",
+      key: "totalEmailSent",
     },
     {
       title: "Open Rate",
-      dataIndex: "openRate",
-      key: "openRate",
+      dataIndex: "totalEmailOpened",
+      key: "totalEmailOpened",
+      // @ts-expect-error bjk jh
+      render: (_,rec) => `${(rec.totalEmailOpened/rec.totalEmailSent)*100}%`,
     },
-    {
-      title: "Actions",
-      key: "actions",
-      render: (_: any, record: any) => (
-        <div className="flex gap-2">
-          <Button icon={<EditOutlined />} />
-          <Button icon={<DeleteOutlined />} danger />
-          {record.status === "Draft" && (
-            <Button icon={<SendOutlined />} type="primary">
-              Send
-            </Button>
-          )}
-        </div>
-      ),
-    },
+    
   ];
+  const [loading, setLoading] = useState(false);
+
+  const fetchampaigns = async () => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`${SERVER_URL}/campaigns/getAll?page=${page}`);
+      setCampaigns(res.data.campaigns);
+      setTotal(res.data.total);
+    } catch (error: any) {
+      console.error(
+        "Error fetching email template:",
+        error.response?.data || error.message
+      );
+      toast.error("Failed to fetch email templates.");
+    } finally {
+      setLoading(false);
+    }
+  };
+useEffect(()=>{
+  fetchampaigns()
+},[page])
 
   return (
     <Layout>
@@ -122,9 +109,24 @@ export default function EmailCampaigns() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <Table columns={columns} dataSource={campaigns} />
+          {/* <Table columns={columns} dataSource={campaigns} /> */}
+          <Table
+  columns={columns}
+  dataSource={campaigns}
+  pagination={{
+    current: page, 
+    pageSize: 10, 
+    total: total, 
+    onChange: (page) => setPage(page),
+    showTotal: (total, range) =>
+      `Showing ${range[0]}-${range[1]} of ${total} campaigns`, 
+  }}
+  // loading={loading} 
+/>
         </motion.div>
       </Content>
+      
+            {loading && <CustomLoader />}
     </Layout>
   );
 }

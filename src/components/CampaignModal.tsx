@@ -8,7 +8,6 @@ import {
   Upload,
   Steps,
   Checkbox,
-  message,
   Card,
 } from "antd";
 import { UploadOutlined, ArrowRightOutlined } from "@ant-design/icons";
@@ -22,7 +21,7 @@ const { Option } = Select;
 
 export default function CreateCampaignModal({ visible, onClose }: any) {
   const [currentStep, setCurrentStep] = useState(0);
-  const steps = ["Details", "Email Template", "Upload List", "Review & Send"];
+  const steps = ["Details", "Upload Excel","Email Template",  "Review & Send"];
   const [templates, setTemplates] = useState([]);
   const [campaignName, setCampaignName] = useState("");
   const [campaignDescription, setCampaignDescription] = useState("");
@@ -39,13 +38,6 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
   const [saveChanges, setSaveChanges] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const aiTemplates = {
-    sales:
-      "Dear [Recipient's Name],\n\nWe are excited to invite you to our upcoming webinar, 'Mastering Software Development Strategies for Success'. As a valued member of our community, your insights and participation are crucial to us.\n\nIn this session, we will explore the latest trends in software development, including agile methodologies, DevOps integration, and cutting-edge technologies that can transform your projects. Our expert speakers will share practical tips and real-world case studies to help you stay ahead in the fast-evolving tech landscape.\n\nDon't miss this opportunity to enhance your skills and network with industry leaders. The webinar is scheduled for [Date] at [Time]. Please register by clicking the button below to secure your spot.\n\n[Register Now Button]",
-
-    followUp:
-      "Dear [Recipient's Name],\n\nWe are excited to invite you to our upcoming webinar, 'Mastering Software Development Strategies for Success'. As a valued member of our community, your insights and participation are crucial to us.\n\nIn this session, we will explore the latest trends in software development, including agile methodologies, DevOps integration, and cutting-edge technologies that can transform your projects. Our expert speakers will share practical tips and real-world case studies to help you stay ahead in the fast-evolving tech landscape.\n\nDon't miss this opportunity to enhance your skills and network with industry leaders. The webinar is scheduled for [Date] at [Time]. Please register by clicking the button below to secure your spot.\n\n[Register Now Button]",
-  };
 
   const handleSelectTemplate = async (value: any) => {
     setSelectedTemplate(value);
@@ -62,12 +54,12 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
       if (res.status == 200) {
         setEmailTemplateBody(res.data.emailBody);
         setEmailTemplateClosing(res.data.emailClosing);
+        setCustomTemplatePurpose(res.data.templatePurpose);
         setEmailTemplateSubject(res.data.emailSubject);
       } else {
         toast.error("Error Fetching Template");
       }
     }
-    // Fetch template here
   };
 
   const handleGenerateTemplate = async () => {
@@ -77,6 +69,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
         return;
       }
       setLoading(true);
+      setGenerated(false);
       try {
         const endpoint =
           !emailTemplateBody.trim() ||
@@ -87,7 +80,10 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
 
         const payload =
           endpoint === "/email/generate"
-            ? { emailPurpose: customTemplatePurpose }
+            ? { emailPurpose: customTemplatePurpose,
+            templatePlaceholders:Object.keys(fileData[0])
+
+             }
             : {
                 emailPurpose: customTemplatePurpose,
                 emailBody: emailTemplateBody,
@@ -111,6 +107,32 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
       } finally {
         setLoading(false);
       }
+    }else{
+        setLoading(true);
+        setGenerated(false);
+
+        try {
+   const { data } = await axios.post(`${SERVER_URL}/email/makeChanges`,  {
+            emailPurpose: customTemplatePurpose,
+            emailBody: emailTemplateBody,
+            emailSubject: emailTemplateSubject,
+            emailClosing: emailTemplateClosing,
+            promptTochange: promptToChagne,
+          });
+  
+          setEmailTemplateSubject(data.emailContent.subject);
+          setEmailTemplateBody(data.emailContent.body);
+          setEmailTemplateClosing(data.emailContent.closing);
+          setGenerated(true);
+        } catch (error: any) {
+          console.error(
+            "Error generating email template:",
+            error.response?.data || error.message
+          );
+          toast.error("Failed to generate email template.");
+        } finally {
+          setLoading(false);
+        } 
     }
   };
 
@@ -122,7 +144,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
       const workbook = XLSX.read(data, { type: "array" });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       setFileData(XLSX.utils.sheet_to_json(sheet));
-      message.success("File uploaded successfully!");
+      toast.success("File uploaded successfully!");
     };
     reader.readAsArrayBuffer(file);
     return false;
@@ -143,6 +165,24 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
           toast.success("Template Saved SuccessFully");
         }
       }
+      if (saveChanges) {
+        const res = await axios.put(`${SERVER_URL}/templates/update/${selectedTemplate}`, {
+          emailSubject: emailTemplateSubject,
+          emailBody: emailTemplateBody,
+          emailClosing: emailTemplateClosing,
+        });
+        if (res.status == 201 || res.status == 200) {
+          toast.success("Template Updated SuccessFully");
+        }
+      }
+      await axios.post(`${SERVER_URL}/campaigns/create`, {
+        emailTemplateSubject: emailTemplateSubject,
+        emailTemplateBody: emailTemplateBody,
+        emailTemplateClosing: emailTemplateClosing,
+        campaignName,
+        description:campaignDescription,
+        recipients:fileData
+      });
 
       setEmailTemplateSubject("");
       setEmailTemplateBody("");
@@ -153,6 +193,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
       setSaveTemplate(false);
       setSaveChanges(false);
       setGenerated(false);
+      fetchTemplates()
     } catch (error: any) {
       console.error(
         "Error generating email template:",
@@ -162,7 +203,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
     } finally {
       setLoading(false);
     }
-    toast.success(`Emails sent to 20recipients!`);
+    toast.success(`Emails sent to ${fileData.length} recipients!`);
     onClose();
   };
 
@@ -171,7 +212,6 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
     try {
       const res = await axios.get(`${SERVER_URL}/templates/getAll/names`);
       setTemplates(res.data);
-      console.log(res.data, "papap");
     } catch (error: any) {
       console.error(
         "Error fetching email template:",
@@ -181,9 +221,8 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
     } finally {
       setLoading(false);
     }
-    toast.success(`Emails sent to 20recipients!`);
-    onClose();
   };
+
   const ChangeSteps = (currentStep: any) => {
     if (currentStep == 0) {
       if (campaignName == "") {
@@ -196,6 +235,13 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
       }
     }
     if (currentStep == 1) {
+        console.log(fileData,"lp")
+        if (fileData.length<1) {
+          toast.error("UPload file please");
+          return;
+        }
+      }
+    if (currentStep == 2) {
       if (selectedTemplate == "") {
         toast.error("Please Select Email Template");
         return;
@@ -223,7 +269,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
     <Modal
       title="Create New Campaign"
       open={visible}
-      onCancel={onClose}
+      onCancel={()=>{onClose()}}
       footer={null}
       width={650}
     >
@@ -254,7 +300,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
           </Card>
         )}
 
-        {currentStep === 1 && (
+        {currentStep === 2 && (
           <Card className="shadow-md p-6">
             <Form.Item label="Select AI Email Template">
               <Select
@@ -385,7 +431,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
             )}
           </Card>
         )}
-        {currentStep === 2 && (
+        {currentStep === 1 && (
           <>
             <Form.Item
               label="Upload Recipient List (Excel/CSV)"
