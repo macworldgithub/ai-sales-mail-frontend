@@ -12,6 +12,7 @@ const { Title } = Typography;
 
 export default function DashboardPage() {
   // State variables
+  const token=localStorage.getItem("x-ai-sales-mail-token")
   const [totalCampaigns, setTotalCampaigns] = useState(0);
   const [totalEmailsSent, setTotalEmailsSent] = useState(0);
   const [totalOpened, setTotalOpened] = useState(0);
@@ -22,8 +23,12 @@ export default function DashboardPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${SERVER_URL}/campaigns/total`);
-      const templateRes = await axios.get(`${SERVER_URL}/templates/total`);
+      const res = await axios.get(`${SERVER_URL}/campaigns/total`,{headers:{
+        Authorization:token
+      }});
+      const templateRes = await axios.get(`${SERVER_URL}/templates/total`,{headers:{
+        Authorization:token
+      }});
 
       setTotalCampaigns(res.data.totalCampaigns);
       setTotalEmailsSent(res.data.totalEmailsSent);

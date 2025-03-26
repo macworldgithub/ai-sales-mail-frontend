@@ -23,6 +23,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
   const [currentStep, setCurrentStep] = useState(0);
   const steps = ["Details", "Upload Excel","Email Template",  "Review & Send"];
   const [templates, setTemplates] = useState([]);
+  const token=localStorage.getItem("x-ai-sales-mail-token")
   const [campaignName, setCampaignName] = useState("");
   const [campaignDescription, setCampaignDescription] = useState("");
   const [emailTemplateBody, setEmailTemplateBody] = useState("");
@@ -50,7 +51,9 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
       setEmailTemplateClosing("");
       setEmailTemplateBody("");
     } else {
-      const res = await axios.get(`${SERVER_URL}/templates/getById/${value}`);
+      const res = await axios.get(`${SERVER_URL}/templates/getById/${value}`,{headers:{
+        Authorization:token
+      }});
       if (res.status == 200) {
         setEmailTemplateBody(res.data.emailBody);
         setEmailTemplateClosing(res.data.emailClosing);
@@ -92,7 +95,9 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
                 promptTochange: promptToChagne,
               };
 
-        const { data } = await axios.post(`${SERVER_URL}${endpoint}`, payload);
+        const { data } = await axios.post(`${SERVER_URL}${endpoint}`, payload,{headers:{
+            Authorization:token
+          }});
 
         setEmailTemplateSubject(data.emailContent.subject);
         setEmailTemplateBody(data.emailContent.body);
@@ -118,7 +123,9 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
             emailSubject: emailTemplateSubject,
             emailClosing: emailTemplateClosing,
             promptTochange: promptToChagne,
-          });
+          },{headers:{
+            Authorization:token
+          }});
   
           setEmailTemplateSubject(data.emailContent.subject);
           setEmailTemplateBody(data.emailContent.body);
@@ -160,7 +167,9 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
           emailSubject: emailTemplateSubject,
           emailBody: emailTemplateBody,
           emailClosing: emailTemplateClosing,
-        });
+        },{headers:{
+            Authorization:token
+          }});
         if (res.status == 201 || res.status == 200) {
           toast.success("Template Saved SuccessFully");
         }
@@ -170,7 +179,9 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
           emailSubject: emailTemplateSubject,
           emailBody: emailTemplateBody,
           emailClosing: emailTemplateClosing,
-        });
+        },{headers:{
+            Authorization:token
+          }});
         if (res.status == 201 || res.status == 200) {
           toast.success("Template Updated SuccessFully");
         }
@@ -182,7 +193,9 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
         campaignName,
         description:campaignDescription,
         recipients:fileData
-      });
+      },{headers:{
+        Authorization:token
+      }});
 
       setEmailTemplateSubject("");
       setEmailTemplateBody("");
@@ -210,7 +223,9 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
   const fetchTemplates = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${SERVER_URL}/templates/getAll/names`);
+      const res = await axios.get(`${SERVER_URL}/templates/getAll/names`,{headers:{
+        Authorization:token
+      }});
       setTemplates(res.data);
     } catch (error: any) {
       console.error(

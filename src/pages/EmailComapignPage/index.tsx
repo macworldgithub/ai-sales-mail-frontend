@@ -20,14 +20,13 @@ export default function EmailCampaigns() {
   const [campaigns, setCampaigns] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-
+  const token=localStorage.getItem("x-ai-sales-mail-token")
   // Status Tags
   const statusTag = (status: string) => {
     const color =
       status === "sent" ? "green" : status === "Scheduled" ? "blue" : "volcano";
     return <Tag color={color}>{status.toUpperCase()}</Tag>;
   };
-console.log(campaigns,"campaigns")
   // Table Columns
   const columns = [
     {
@@ -60,7 +59,9 @@ console.log(campaigns,"campaigns")
   const fetchampaigns = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${SERVER_URL}/campaigns/getAll?page=${page}`);
+      const res = await axios.get(`${SERVER_URL}/campaigns/getAll?page=${page}`,{headers:{
+        Authorization:token
+      }});
       setCampaigns(res.data.campaigns);
       setTotal(res.data.total);
     } catch (error: any) {
