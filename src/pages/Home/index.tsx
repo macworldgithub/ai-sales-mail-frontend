@@ -43,8 +43,8 @@ export default function DashboardPage() {
 
   // Data for pie chart
   const pieData = [
-    { name: "Opened", value: 23, color: "#4CAF50" },
-    { name: "Remaining", value: 71, color: "#FFC107" },
+    { name: "Opened", value: totalOpened, color: "#4CAF50" },
+    { name: "Remaining", value: totalEmailsSent - totalOpened, color: "#FFC107" },
   ];
 
   // Sample recent campaigns

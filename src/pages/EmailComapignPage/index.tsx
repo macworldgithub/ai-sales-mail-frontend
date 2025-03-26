@@ -92,7 +92,7 @@ useEffect(()=>{
           </Title>
         
           <Button type="primary"  icon={<PlusOutlined />} onClick={() => setIsModalOpen(true)}>New Campaign</Button>
-      <CreateCampaignModal visible={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <CreateCampaignModal visible={isModalOpen} onClose={() => {setIsModalOpen(false);fetchampaigns()}} />
     
         </motion.div>
 
