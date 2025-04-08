@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import axios from "axios";
 import CustomLoader from "../../commons/CustomLoader";
 import AutomateReplyModal from "../../components/AutomateReplyModal";
+import FollowUpModal from "../../components/FollowUpModal";
 
 const { Content } = Layout;
 const { Title } = Typography;
@@ -16,7 +17,10 @@ const { Search } = Input;
 export default function EmailCampaigns() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAlreadyAutonated, setIsAlreadyAutomated] = useState(false);
+  const [isAlreadyFollwedUp, setIsAlreadyFollwedUp] = useState(false);
+  const [followUpDuration, setFollowUpDuration] = useState(null);
   const [isAutomatedModalOpen, setIsAutomatedModalOpen] = useState(false);
+  const [isFollwoUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [campaigns, setCampaigns] = useState([]);
   const [isSelectdCompaign, setIsSelectdCompaign] = useState(null);
   const [total, setTotal] = useState(0);
@@ -83,8 +87,8 @@ export default function EmailCampaigns() {
           >
             {!record.isAutomatedReply ? "Automate Reply" : "Update Automation"}
           </Button>
-          <Button type="primary" onClick={() => handleScheduleFollowUp(record)}>
-            Schedule Follow Up
+          <Button type="primary" onClick={() => handleScheduleFollowUp(record._id,record.hasFollowUp,record.followUpDuration)}>
+            {!record.hasFollowUp ? "Schedule Follow Up" : "Update Follow Up"}
           </Button>
         </div>
       ),
@@ -96,13 +100,13 @@ export default function EmailCampaigns() {
     setIsSelectdCompaign(campaignId);
     setIsAlreadyAutomated(isAutomatedReply);
     setIsAutomatedModalOpen(true);
-    console.log("Automating replies for:", campaignId);
-    // Add logic to automate replies
   };
 
-  const handleScheduleFollowUp = (campaign: any) => {
-    console.log("Scheduling follow-up for:", campaign);
-    // Add logic to schedule follow-ups
+  const handleScheduleFollowUp = (campaignId: any, isFollwed: any,duration:any) => {
+    setIsSelectdCompaign(campaignId);
+    setIsAlreadyFollwedUp(isFollwed);
+    setIsFollowUpModalOpen(true);
+    setFollowUpDuration(duration)
   };
 
   const fetchampaigns = async () => {
@@ -190,6 +194,19 @@ export default function EmailCampaigns() {
             // loading={loading}
           />
         </motion.div>
+        <FollowUpModal
+          isSelectdCompaign={isSelectdCompaign}
+          isAlreadyFollwedUp={isAlreadyFollwedUp}
+          followUpDurationss={followUpDuration}
+          visible={isFollwoUpModalOpen}
+          onClose={() => {
+            setIsFollowUpModalOpen(false);
+            setIsSelectdCompaign(null);
+            setIsAlreadyFollwedUp(false);
+            setFollowUpDuration(null)
+            fetchampaigns();
+          }}
+        />
         <AutomateReplyModal
           isSelectdCompaign={isSelectdCompaign}
           isAlreadyAutonated={isAlreadyAutonated}
