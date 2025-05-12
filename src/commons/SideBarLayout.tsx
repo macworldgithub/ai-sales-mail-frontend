@@ -53,7 +53,7 @@ export default function SidebarLayout({
         className="bg-gray-900 fixed top-0 min-h-screen text-white shadow-lg"
       >
         <div className="h-16 flex items-center justify-center text-xl font-bold text-white">
-          {!collapsed ? "AI SalesMail" : "AI"}
+          {!collapsed ? "Ai SalesMail" : "Ai"}
         </div>
         <Menu
           theme="dark"

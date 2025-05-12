@@ -41,7 +41,7 @@ export default function Login() {
         transition={{ duration: 0.5, ease: "easeOut" }}
       >
         <Title level={2} className="text-center text-gray-800">
-          Login to AI SalesMail
+          Login to Ai SalesMail
         </Title>
 
         <Form layout="vertical" onFinish={onFinish}>

@@ -317,7 +317,7 @@ export default function CreateCampaignModal({ visible, onClose }: any) {
 
         {currentStep === 2 && (
           <Card className="shadow-md p-6">
-            <Form.Item label="Select AI Email Template">
+            <Form.Item label="Select Ai Email Template">
               <Select
                 value={selectedTemplate}
                 onChange={handleSelectTemplate}
