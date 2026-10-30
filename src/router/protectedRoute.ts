@@ -1,17 +1,6 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-
-const ProtectedRoute = ({ children }: any) => {
-  const navigate = useNavigate();
-  const isAuthenticated = !!localStorage.getItem("x-ai-sales-mail-token"); // Check if token exists
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate("/auth/login", { replace: true });
-    }
-  }, [isAuthenticated, navigate]);
-
-  return isAuthenticated ? children : null; // Return null until redirect happens
-};
-
-export default ProtectedRoute;
+import { createElement, type ReactNode } from 'react';
+import { Navigate } from 'react-router-dom';
+import { TOKEN_KEY } from '../config';
+export default function ProtectedRoute({ children }: { children: ReactNode }) {
+  return localStorage.getItem(TOKEN_KEY) ? children : createElement(Navigate, { to: '/auth/login', replace: true });
+}

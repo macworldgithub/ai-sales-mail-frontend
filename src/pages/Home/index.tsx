@@ -1,151 +1,45 @@
-import { motion } from "framer-motion";
-import { Typography, Card, Table, Progress } from "antd";
-import { BarChart, Briefcase, Mail, UserCheck } from "lucide-react";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
-import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
-import { SERVER_URL } from "../../config";
-import axios from "axios";
-import CustomLoader from "../../commons/CustomLoader";
-
-const { Title } = Typography;
-
+import { useEffect, useState } from 'react';
+import { Typography, Card, Table, Tag, Empty, Alert, Button, Skeleton } from 'antd';
+import { MailOutlined, SendOutlined, RiseOutlined, FileTextOutlined } from '@ant-design/icons';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { api, errorMessage } from '../../config';
+import { type Campaign, openRate } from '../../types';
+interface Stats { totalCampaigns: number; totalEmailsSent: number; totalOpened: number }
 export default function DashboardPage() {
-  // State variables
-  const token=localStorage.getItem("x-ai-sales-mail-token")
-  const [totalCampaigns, setTotalCampaigns] = useState(0);
-  const [totalEmailsSent, setTotalEmailsSent] = useState(0);
-  const [totalOpened, setTotalOpened] = useState(0);
-  const [totalTemplates, setTotalTemplates] = useState(0);
-  const [loading, setLoading] = useState(false);
-
-  // Fetch campaign statistics
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const res = await axios.get(`${SERVER_URL}/campaigns/total`,{headers:{
-        Authorization: `Bearer ${token}` 
-      }});
-      const templateRes = await axios.get(`${SERVER_URL}/templates/total`,{headers:{
-        Authorization: `Bearer ${token}` 
-      }});
-
-      setTotalCampaigns(res.data.totalCampaigns);
-      setTotalEmailsSent(res.data.totalEmailsSent);
-      setTotalOpened(res.data.totalOpened);
-      setTotalTemplates(templateRes.data.total);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      toast.error("Failed to fetch dashboard data.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  const [stats, setStats] = useState<Stats>({ totalCampaigns: 0, totalEmailsSent: 0, totalOpened: 0 });
+  const [templates, setTemplates] = useState(0);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [refresh, setRefresh] = useState(0);
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  // Data for pie chart
-  const pieData = [
-    { name: "Opened", value: totalOpened, color: "#4CAF50" },
-    { name: "Remaining", value: totalEmailsSent - totalOpened, color: "#FFC107" },
+    let active = true;
+    setLoading(true); setError('');
+    Promise.all([api.get('/campaigns/total'), api.get('/templates/total'), api.get('/campaigns/getAll', { params: { page: 1, limit: 5 } })])
+      .then(([statistics, saved, recent]) => { if (active) { setStats(statistics.data); setTemplates(saved.data.total); setCampaigns(recent.data.campaigns); } })
+      .catch(error => { if (active) setError(errorMessage(error)); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [refresh]);
+  const pieData = [{ name: 'Opened', value: stats.totalOpened }, { name: 'Unopened', value: Math.max(0, stats.totalEmailsSent - stats.totalOpened) }];
+  const cards = [
+    { label: 'Total campaigns', value: stats.totalCampaigns, icon: <MailOutlined />, color: '#2563eb' },
+    { label: 'Emails sent', value: stats.totalEmailsSent, icon: <SendOutlined />, color: '#0d9488' },
+    { label: 'Open rate', value: `${openRate(stats.totalOpened, stats.totalEmailsSent).toFixed(1)}%`, icon: <RiseOutlined />, color: '#7c3aed' },
+    { label: 'Saved templates', value: templates, icon: <FileTextOutlined />, color: '#d97706' },
   ];
-
-  // Sample recent campaigns
-  const recentCampaigns = [
-    { key: "1", name: "Product Launch", sent: 4500, openRate: "60%", status: "Completed" },
-    { key: "2", name: "Black Friday Sale", sent: 8000, openRate: "72%", status: "Active" },
-    { key: "3", name: "Monthly Newsletter", sent: 3000, openRate: "50%", status: "Draft" },
-  ];
-
-  return (
-    <>
-      <Title level={3} className="text-gray-800">Dashboard Overview</Title>
-
-      {/* Stats Cards */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="grid grid-cols-1 md:grid-cols-4 gap-6"
-      >
-        <Card className="shadow-lg hover:shadow-xl transition-all bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
-          <Title level={4} className="text-white flex items-center gap-2">
-            <Mail size={18} /> Total Campaigns
-          </Title>
-          <p className="text-3xl font-semibold"> {totalCampaigns}</p>
-        </Card>
-
-        <Card className="shadow-lg hover:shadow-xl transition-all bg-gradient-to-r from-green-400 to-green-600 text-white">
-          <Title level={4} className="text-white flex items-center gap-2">
-            <UserCheck size={18} /> Emails Sent
-          </Title>
-          <p className="text-3xl font-semibold">{totalEmailsSent}</p>
-        </Card>
-
-        <Card className="shadow-lg hover:shadow-xl transition-all bg-gradient-to-r from-purple-500 to-pink-500 text-white">
-          <Title level={4} className="text-white flex items-center gap-2">
-            <BarChart size={18} /> Open Rate
-          </Title>
-          <p className="text-3xl font-semibold">
-  {isNaN(totalOpened / totalEmailsSent) || !isFinite(totalOpened / totalEmailsSent)
-    ? "0.00%"
-    : `${((totalOpened / totalEmailsSent) * 100).toFixed(2)}%`}
-</p>
-        </Card>
-
-        <Card className="shadow-lg hover:shadow-xl transition-all bg-gradient-to-r from-yellow-400 to-orange-500 text-white">
-          <Title level={4} className="text-white flex items-center gap-2">
-            <Briefcase size={18} /> Saved Templates
-          </Title>
-          <p className="text-3xl font-semibold">{totalTemplates}</p>
-        </Card>
-      </motion.div>
-
-      {/* Charts and Recent Activity */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6"
-      >
-        {/* Pie Chart */}
-        <Card title="Email Engagement Breakdown" className="shadow-md">
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie data={pieData} cx="50%" cy="50%" outerRadius={90} dataKey="value">
-                {pieData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </Card>
-
-        {/* Recent Campaigns */}
-        <Card title="Recent Campaigns" className="shadow-md">
-          <Table
-            columns={[
-              { title: "Campaign Name", dataIndex: "name", key: "name" },
-              { title: "Emails Sent", dataIndex: "sent", key: "sent" },
-              { title: "Open Rate", dataIndex: "openRate", key: "openRate" },
-              {
-                title: "Status",
-                dataIndex: "status",
-                key: "status",
-                render: (status) => (
-                  <Progress percent={status === "Active" ? 80 : status === "Completed" ? 100 : 40} />
-                ),
-              },
-            ]}
-            dataSource={recentCampaigns}
-            pagination={false}
-          />
-        </Card>
-
-{loading&&<CustomLoader/>}      </motion.div>
-    </>
-  );
+  return <>
+    <div className="page-heading"><div><Typography.Title level={2}>Dashboard</Typography.Title><Typography.Text type="secondary">Your campaigns and email engagement at a glance.</Typography.Text></div><Button onClick={() => setRefresh(value => value + 1)} loading={loading}>Refresh</Button></div>
+    {error && <Alert showIcon type="error" message={error} className="mb-4" />}
+    <div className="stats-grid">{cards.map(card => <Card key={card.label} className="stat-card"><Skeleton loading={loading} active paragraph={{ rows: 1 }}><div className="stat-label"><span>{card.label}</span><span className="stat-icon" style={{ color: card.color }}>{card.icon}</span></div><div className="stat-value">{card.value}</div></Skeleton></Card>)}</div>
+    <div className="dashboard-grid">
+      <Card title="Email engagement">{loading ? <Skeleton active /> : stats.totalEmailsSent ? <div className="engagement-chart"><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={pieData} innerRadius={62} outerRadius={95} dataKey="value" paddingAngle={3} isAnimationActive={false}>{pieData.map((entry, index) => <Cell key={entry.name} fill={['#2563eb', '#cbd5e1'][index]} />)}</Pie><Tooltip /><Legend formatter={value => <span style={{ color: '#64748b' }}>{value}</span>} /></PieChart></ResponsiveContainer></div> : <Empty className="empty-chart" description="Engagement appears after you send your first campaign." />}</Card>
+      <Card title="Recent campaigns"><Table<Campaign> rowKey="_id" loading={loading} dataSource={campaigns} pagination={false} scroll={{ x: 480 }} columns={[
+        { title: 'Campaign', dataIndex: 'campaignName' },
+        { title: 'Sent', dataIndex: 'totalEmailSent', width: 70 },
+        { title: 'Opened', render: (_, record) => `${openRate(record.totalEmailOpened, record.totalEmailSent).toFixed(1)}%`, width: 90 },
+        { title: 'Status', dataIndex: 'status', render: (status: string) => <Tag color={status === 'sent' ? 'green' : status === 'failed' || status === 'attention' ? 'red' : 'blue'}>{status}</Tag> },
+      ]} /></Card>
+    </div>
+  </>;
 }

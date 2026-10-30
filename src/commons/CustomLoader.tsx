@@ -1,10 +1,2 @@
-import { Spin } from "antd";
-const CustomLoader = () => {
-  return (
-    <div className="min-h-screen top-0 left-0 fixed z-[999999999999999999px] h-full w-full flex justify-center items-center">
-      <Spin />
-    </div>
-  );
-};
-
-export default CustomLoader;
+import { Spin } from 'antd';
+export default function CustomLoader() { return <div role="status" aria-label="Loading" style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'grid', placeItems: 'center', background: '#ffffff99' }}><Spin size="large" /></div>; }

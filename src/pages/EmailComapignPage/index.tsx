@@ -1,226 +1,48 @@
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { Layout, Table, Button, Input, Tag, Typography } from "antd";
-import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
-import CreateCampaignModal from "../../components/CampaignModal";
-import { SERVER_URL } from "../../config";
-import toast from "react-hot-toast";
-import axios from "axios";
-import CustomLoader from "../../commons/CustomLoader";
-import AutomateReplyModal from "../../components/AutomateReplyModal";
-import FollowUpModal from "../../components/FollowUpModal";
-
-const { Content } = Layout;
-const { Title } = Typography;
-const { Search } = Input;
-
+import { useCallback, useEffect, useState } from 'react';
+import { Table, Button, Input, Tag, Typography, Alert, Space } from 'antd';
+import type { TableColumnsType } from 'antd';
+import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import CreateCampaignModal from '../../components/CampaignModal';
+import AutomationModal from '../../components/AutomationModal';
+import { api, errorMessage } from '../../config';
+import { type Campaign, openRate } from '../../types';
 export default function EmailCampaigns() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isAlreadyAutonated, setIsAlreadyAutomated] = useState(false);
-  const [isAlreadyFollwedUp, setIsAlreadyFollwedUp] = useState(false);
-  const [followUpDuration, setFollowUpDuration] = useState(null);
-  const [isAutomatedModalOpen, setIsAutomatedModalOpen] = useState(false);
-  const [isFollwoUpModalOpen, setIsFollowUpModalOpen] = useState(false);
-  const [campaigns, setCampaigns] = useState([]);
-  const [isSelectdCompaign, setIsSelectdCompaign] = useState(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selected, setSelected] = useState<Campaign | null>(null);
+  const [mode, setMode] = useState<'reply' | 'followUp'>('reply');
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const token = localStorage.getItem("x-ai-sales-mail-token");
-  // Status Tags
-  const statusTag = (status: string) => {
-    const color =
-      status === "sent" ? "green" : status === "Scheduled" ? "blue" : "volcano";
-    return <Tag color={color}>{status.toUpperCase()}</Tag>;
-  };
-  // Table Columns
-  const columns = [
-    {
-      title: "Campaign Name",
-      dataIndex: "campaignName",
-      key: "campaignName",
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      render: (status: string) => statusTag(status),
-    },
-    {
-      title: "Emails Sent",
-      dataIndex: "totalEmailSent",
-      key: "totalEmailSent",
-    },
-    {
-      title: "Open Rate",
-      dataIndex: "totalEmailOpened",
-      key: "totalEmailOpened",
-      // @ts-expect-error bjk jh
-      render: (_, rec) =>
-        `${((rec.totalEmailOpened / rec.totalEmailSent) * 100).toFixed(2)}%`,
-    },
-    // {
-    //   title: "Reply Rate",
-    //   dataIndex: "totalEmailOpened",
-    //   key: "totalEmailOpened",
-    //   // @ts-expect-error bjk jh
-    //   render: (_, rec) =>
-    //     `${((rec.totalEmailOpened / rec.totalEmailSent) * 100).toFixed(2)}%`,
-    // },
-    {
-      title: "Reply Automated",
-      dataIndex: "totalEmailOpened",
-      key: "totalEmailOpened",
-      // @ts-expect-error bjk jh
-      render: (_, rec) => `${rec.isAutomatedReply ? "Yes" : "No"}`,
-    },
-    {
-      title: "Actions",
-      key: "actions",
-      // @ts-expect-error jh kjh
-      render: (_, record) => (
-        <div className="space-x-4 space-y-3">
-          <Button
-            type="default"
-            onClick={() =>
-              handleAutomateReply(record._id, record.isAutomatedReply)
-            }
-          >
-            {!record.isAutomatedReply ? "Automate Reply" : "Update Automation"}
-          </Button>
-          <Button type="primary" onClick={() => handleScheduleFollowUp(record._id,record.hasFollowUp,record.followUpDuration)}>
-            {!record.hasFollowUp ? "Schedule Follow Up" : "Update Follow Up"}
-          </Button>
-        </div>
-      ),
-    },
-  ];
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const handleAutomateReply = (campaignId: any, isAutomatedReply: any) => {
-    setIsSelectdCompaign(campaignId);
-    setIsAlreadyAutomated(isAutomatedReply);
-    setIsAutomatedModalOpen(true);
-  };
-
-  const handleScheduleFollowUp = (campaignId: any, isFollwed: any,duration:any) => {
-    setIsSelectdCompaign(campaignId);
-    setIsAlreadyFollwedUp(isFollwed);
-    setIsFollowUpModalOpen(true);
-    setFollowUpDuration(duration)
-  };
-
-  const fetchampaigns = async () => {
-    setLoading(true);
-    try {
-      const res = await axios.get(
-        `${SERVER_URL}/campaigns/getAll?page=${page}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      setCampaigns(res.data.campaigns);
-      setTotal(res.data.total);
-    } catch (error: any) {
-      console.error(
-        "Error fetching email template:",
-        error.response?.data || error.message
-      );
-      toast.error("Failed to fetch email templates.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [error, setError] = useState('');
+  const [refresh, setRefresh] = useState(0);
+  useEffect(() => { const timer = setTimeout(() => { setQuery(search); setPage(1); }, 300); return () => clearTimeout(timer); }, [search]);
+  const reload = useCallback(() => setRefresh(value => value + 1), []);
   useEffect(() => {
-    fetchampaigns();
-  }, [page]);
-
-  return (
-    <Layout>
-      <Content className="p-6 bg-gray-100 min-h-screen">
-        {/* Page Title & Button */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex justify-between items-center mb-6"
-        >
-          <Title level={3} className="text-gray-800">
-            Email Campaigns
-          </Title>
-
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setIsModalOpen(true)}
-          >
-            New Campaign
-          </Button>
-          <CreateCampaignModal
-            visible={isModalOpen}
-            onClose={() => {
-              setIsModalOpen(false);
-              fetchampaigns();
-            }}
-          />
-        </motion.div>
-
-        {/* Search Bar */}
-        <Search
-          placeholder="Search campaigns..."
-          prefix={<SearchOutlined />}
-          className="mb-4 w-full md:w-1/3"
-        />
-
-        {/* Email Campaigns Table */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          {/* <Table columns={columns} dataSource={campaigns} /> */}
-          <Table
-            columns={columns}
-            dataSource={campaigns}
-            pagination={{
-              current: page,
-              pageSize: 10,
-              total: total,
-              onChange: (page) => setPage(page),
-              showTotal: (total, range) =>
-                `Showing ${range[0]}-${range[1]} of ${total} campaigns`,
-            }}
-            // loading={loading}
-          />
-        </motion.div>
-        <FollowUpModal
-          isSelectdCompaign={isSelectdCompaign}
-          isAlreadyFollwedUp={isAlreadyFollwedUp}
-          followUpDurationss={followUpDuration}
-          visible={isFollwoUpModalOpen}
-          onClose={() => {
-            setIsFollowUpModalOpen(false);
-            setIsSelectdCompaign(null);
-            setIsAlreadyFollwedUp(false);
-            setFollowUpDuration(null)
-            fetchampaigns();
-          }}
-        />
-        <AutomateReplyModal
-          isSelectdCompaign={isSelectdCompaign}
-          isAlreadyAutonated={isAlreadyAutonated}
-          visible={isAutomatedModalOpen}
-          onClose={() => {
-            setIsAutomatedModalOpen(false);
-            setIsSelectdCompaign(null);
-            setIsAlreadyAutomated(false);
-            fetchampaigns();
-          }}
-        />
-      </Content>
-
-      {loading && <CustomLoader />}
-    </Layout>
-  );
+    const controller = new AbortController();
+    setLoading(true); setError('');
+    api.get('/campaigns/getAll', { params: { page, search: query }, signal: controller.signal })
+      .then(({ data }) => { setCampaigns(data.campaigns); setTotal(data.total); })
+      .catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [page, query, refresh]);
+  const columns: TableColumnsType<Campaign> = [
+    { title: 'Campaign', dataIndex: 'campaignName', width: 220 },
+    { title: 'Status', dataIndex: 'status', width: 110, render: (status: string) => <Tag color={status === 'sent' ? 'green' : ['attention', 'failed'].includes(status) ? 'red' : 'blue'}>{status.toUpperCase()}</Tag> },
+    { title: 'Emails sent', dataIndex: 'totalEmailSent', width: 100 },
+    { title: 'Open rate', width: 100, render: (_, record) => `${openRate(record.totalEmailOpened, record.totalEmailSent).toFixed(1)}%` },
+    { title: 'Replies', dataIndex: 'totalEmailReplied', width: 80 },
+    { title: 'Actions', width: 350, render: (_, record) => <Space wrap><Button onClick={() => { setSelected(record); setMode('reply'); }}>{record.isAutomatedReply ? 'Edit reply' : 'Automate reply'}</Button><Button onClick={() => { setSelected(record); setMode('followUp'); }}>{record.hasFollowUp ? 'Edit follow-up' : 'Schedule follow-up'}</Button></Space> },
+  ];
+  return <>
+    <div className="page-heading"><div><Typography.Title level={2}>Email campaigns</Typography.Title><Typography.Text type="secondary">Create personalized outreach and keep the conversation going.</Typography.Text></div><Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>New campaign</Button></div>
+    {error && <Alert type="error" showIcon message={error} className="mb-4" />}
+    <div className="campaign-toolbar"><Input.Search allowClear aria-label="Search campaigns" placeholder="Search campaigns…" value={search} onChange={event => setSearch(event.target.value)} onSearch={value => { setQuery(value); setPage(1); }} /><Button aria-label="Refresh campaigns" icon={<ReloadOutlined />} loading={loading} onClick={reload} /></div>
+    <Table<Campaign> rowKey="_id" columns={columns} dataSource={campaigns} loading={loading} scroll={{ x: 1060 }} pagination={{ current: page, pageSize: 10, total, onChange: setPage, showSizeChanger: false, responsive: true, showTotal: count => `${count} campaigns` }} />
+    {createOpen && <CreateCampaignModal visible onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); setPage(1); reload(); }} />}
+    {selected && <AutomationModal key={`${selected._id}-${mode}`} campaign={selected} mode={mode} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); reload(); }} />}
+  </>;
 }

@@ -1,520 +1,114 @@
-import { useEffect, useState } from "react";
-import {
-  Modal,
-  Form,
-  Input,
-  Button,
-  Select,
-  Upload,
-  Steps,
-  Checkbox,
-  Card,
-} from "antd";
-import { UploadOutlined, ArrowRightOutlined } from "@ant-design/icons";
-import * as XLSX from "xlsx";
-import axios from "axios";
-import { SERVER_URL } from "../config";
-import toast from "react-hot-toast";
-import CustomLoader from "../commons/CustomLoader";
-
-const { Option } = Select;
-
-export default function CreateCampaignModal({ visible, onClose }: any) {
-  const [currentStep, setCurrentStep] = useState(0);
-  const steps = ["Details", "Upload Excel","Email Template",  "Review & Send"];
-  const [templates, setTemplates] = useState([]);
-  const token=localStorage.getItem("x-ai-sales-mail-token")
-  const [campaignName, setCampaignName] = useState("");
-  const [campaignDescription, setCampaignDescription] = useState("");
-  const [emailTemplateBody, setEmailTemplateBody] = useState("");
-  const [emailTemplateSubject, setEmailTemplateSubject] = useState("");
-  const [emailTemplateClosing, setEmailTemplateClosing] = useState("");
-  const [fileData, setFileData] = useState([]);
-  const [selectedTemplate, setSelectedTemplate] = useState("");
-  const [customTemplateName, setCustomTemplateName] = useState("");
-  const [customTemplatePurpose, setCustomTemplatePurpose] = useState("");
-  const [promptToChagne, setPromptToChagne] = useState("");
-  const [genarted, setGenerated] = useState(false);
+import { useEffect, useState } from 'react';
+import { Modal, Form, Input, Button, Select, Upload, Steps, Checkbox, Alert, Typography, Table, Spin } from 'antd';
+import type { RcFile } from 'antd/es/upload';
+import { UploadOutlined } from '@ant-design/icons';
+import toast from 'react-hot-toast';
+import { api, errorMessage } from '../config';
+import type { EmailContent, ModalProps, TemplateSummary } from '../types';
+import { normalizeRows, type Recipient } from '../utils/recipients';
+import EmailFields from './EmailFields';
+interface Props extends ModalProps { onCreated: () => void }
+export default function CreateCampaignModal({ visible, onClose, onCreated }: Props) {
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [rows, setRows] = useState<Recipient[]>([]);
+  const [filename, setFilename] = useState('');
+  const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [selected, setSelected] = useState('custom');
+  const [templateName, setTemplateName] = useState('');
+  const [purpose, setPurpose] = useState('');
+  const [changes, setChanges] = useState('');
+  const [email, setEmail] = useState<EmailContent>({ subject: '', body: '', closing: '' });
   const [saveTemplate, setSaveTemplate] = useState(false);
-  const [saveChanges, setSaveChanges] = useState(false);
+  const [updateTemplate, setUpdateTemplate] = useState(false);
   const [loading, setLoading] = useState(false);
-
-
-  const handleSelectTemplate = async (value: any) => {
-    setSelectedTemplate(value);
-    if (value == "custom") {
-      setCustomTemplateName("");
-      setPromptToChagne("");
-      setGenerated(false);
-      setCustomTemplatePurpose("");
-      setEmailTemplateSubject("");
-      setEmailTemplateClosing("");
-      setEmailTemplateBody("");
-    } else {
-      const res = await axios.get(`${SERVER_URL}/templates/getById/${value}`,{headers:{
-        Authorization: `Bearer ${token}` 
-      }});
-      if (res.status == 200) {
-        setEmailTemplateBody(res.data.emailBody);
-        setEmailTemplateClosing(res.data.emailClosing);
-        setCustomTemplatePurpose(res.data.templatePurpose);
-        setEmailTemplateSubject(res.data.emailSubject);
-      } else {
-        toast.error("Error Fetching Template");
-      }
-    }
-  };
-
-  const handleGenerateTemplate = async () => {
-    if (selectedTemplate == "custom") {
-      if (!customTemplatePurpose.trim()) {
-        toast.error("Please Provide Purpose");
-        return;
-      }
-      setLoading(true);
-      setGenerated(false);
-      try {
-        const endpoint =
-          !emailTemplateBody.trim() ||
-          !emailTemplateClosing.trim() ||
-          !emailTemplateSubject.trim()
-            ? "/email/generate"
-            : "/email/makeChanges";
-
-        const payload =
-          endpoint === "/email/generate"
-            ? { emailPurpose: customTemplatePurpose,
-            templatePlaceholders:Object.keys(fileData[0])
-
-             }
-            : {
-                emailPurpose: customTemplatePurpose,
-                emailBody: emailTemplateBody,
-                emailSubject: emailTemplateSubject,
-                emailClosing: emailTemplateClosing,
-                promptTochange: promptToChagne,
-              };
-
-        const { data } = await axios.post(`${SERVER_URL}${endpoint}`, payload,{headers:{
-            Authorization: `Bearer ${token}` 
-          }});
-
-        setEmailTemplateSubject(data.emailContent.subject);
-        setEmailTemplateBody(data.emailContent.body);
-        setEmailTemplateClosing(data.emailContent.closing);
-        setGenerated(true);
-      } catch (error: any) {
-        console.error(
-          "Error generating email template:",
-          error.response?.data || error.message
-        );
-        toast.error("Failed to generate email template.");
-      } finally {
-        setLoading(false);
-      }
-    }else{
-        setLoading(true);
-        setGenerated(false);
-
-        try {
-   const { data } = await axios.post(`${SERVER_URL}/email/makeChanges`,  {
-            emailPurpose: customTemplatePurpose,
-            emailBody: emailTemplateBody,
-            emailSubject: emailTemplateSubject,
-            emailClosing: emailTemplateClosing,
-            promptTochange: promptToChagne,
-          },{headers:{
-            Authorization: `Bearer ${token}` 
-          }});
-  
-          setEmailTemplateSubject(data.emailContent.subject);
-          setEmailTemplateBody(data.emailContent.body);
-          setEmailTemplateClosing(data.emailContent.closing);
-          setGenerated(true);
-        } catch (error: any) {
-          console.error(
-            "Error generating email template:",
-            error.response?.data || error.message
-          );
-          toast.error("Failed to generate email template.");
-        } finally {
-          setLoading(false);
-        } 
-    }
-  };
-
-  const handleFileUpload = (file: any) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      // @ts-expect-error jh kh
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      setFileData(XLSX.utils.sheet_to_json(sheet));
-      toast.success("File uploaded successfully!");
-    };
-    reader.readAsArrayBuffer(file);
-    return false;
-  };
-
-  const handleSendEmails = async () => {
-    setLoading(true);
-    try {
-      if (saveTemplate) {
-        const res = await axios.post(`${SERVER_URL}/templates/create`, {
-          templateName: customTemplateName,
-          templatePurpose: customTemplatePurpose,
-          emailSubject: emailTemplateSubject,
-          emailBody: emailTemplateBody,
-          emailClosing: emailTemplateClosing,
-        },{headers:{
-            Authorization: `Bearer ${token}` 
-          }});
-        if (res.status == 201 || res.status == 200) {
-          toast.success("Template Saved SuccessFully");
-        }
-      }
-      if (saveChanges) {
-        const res = await axios.put(`${SERVER_URL}/templates/update/${selectedTemplate}`, {
-          emailSubject: emailTemplateSubject,
-          emailBody: emailTemplateBody,
-          emailClosing: emailTemplateClosing,
-        },{headers:{
-            Authorization: `Bearer ${token}` 
-          }});
-        if (res.status == 201 || res.status == 200) {
-          toast.success("Template Updated SuccessFully");
-        }
-      }
-      await axios.post(`${SERVER_URL}/campaigns/create`, {
-        emailTemplateSubject: emailTemplateSubject,
-        emailTemplateBody: emailTemplateBody,
-        emailTemplateClosing: emailTemplateClosing,
-        campaignName,
-        description:campaignDescription,
-        recipients:fileData
-      },{headers:{
-        Authorization: `Bearer ${token}` 
-      }});
-
-      setEmailTemplateSubject("");
-      setEmailTemplateBody("");
-      setEmailTemplateClosing("");
-      setCampaignName("");
-      setCampaignDescription("");
-      setCurrentStep(0);
-      setSaveTemplate(false);
-      setSaveChanges(false);
-      setGenerated(false);
-      fetchTemplates()
-    } catch (error: any) {
-      console.error(
-        "Error generating email template:",
-        error.response?.data || error.message
-      );
-      toast.error("Failed to send email.");
-    } finally {
-      setLoading(false);
-    }
-    toast.success(`Emails sent to ${fileData.length} recipients!`);
-    onClose();
-  };
-
-  const fetchTemplates = async () => {
-    setLoading(true);
-    try {
-      const res = await axios.get(`${SERVER_URL}/templates/getAll/names`,{headers:{
-        Authorization: `Bearer ${token}` 
-      }});
-      setTemplates(res.data);
-    } catch (error: any) {
-      console.error(
-        "Error fetching email template:",
-        error.response?.data || error.message
-      );
-      toast.error("Failed to fetch email templates.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const ChangeSteps = (currentStep: any) => {
-    if (currentStep == 0) {
-      if (campaignName == "") {
-        toast.error("Please Provide Campaign Name");
-        return;
-      }
-      if (campaignDescription == "") {
-        toast.error("Please Provide Campaign Description");
-        return;
-      }
-    }
-    if (currentStep == 1) {
-        console.log(fileData,"lp")
-        if (fileData.length<1) {
-          toast.error("UPload file please");
-          return;
-        }
-      }
-    if (currentStep == 2) {
-      if (selectedTemplate == "") {
-        toast.error("Please Select Email Template");
-        return;
-      }
-      if (emailTemplateBody == "") {
-        toast.error("There is no email Template Body");
-        return;
-      }
-      if (emailTemplateSubject == "") {
-        toast.error("There is no email Template Subject");
-        return;
-      }
-      if (emailTemplateClosing == "") {
-        toast.error("There is no email Template Closing");
-        return;
-      }
-    }
-    setCurrentStep(currentStep + 1);
-  };
-
+  const [error, setError] = useState('');
+  const [requestId] = useState(() => crypto.randomUUID());
   useEffect(() => {
-    fetchTemplates();
+    const controller = new AbortController();
+    api.get('/templates/getAll/names', { signal: controller.signal }).then(({ data }) => setTemplates(data)).catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); });
+    return () => controller.abort();
   }, []);
-  return (
-    <Modal
-      title="Create New Campaign"
-      open={visible}
-      onCancel={()=>{onClose()}}
-      footer={null}
-      width={650}
-    >
-      <Steps current={currentStep} size="small" style={{ marginTop: 20 }}>
-        {steps.map((step, index) => (
-          <Steps.Step key={index} title={step} />
-        ))}
-      </Steps>
-
-      <Form layout="vertical" style={{ marginTop: 20 }}>
-        {currentStep === 0 && (
-          <Card className="shadow-md p-6">
-            <Form.Item label="Campaign Name" required>
-              <Input
-                value={campaignName}
-                onChange={(e) => setCampaignName(e.target.value)}
-                placeholder="Enter campaign name"
-              />
-            </Form.Item>
-            <Form.Item label="Campaign Description" required>
-              <Input.TextArea
-                value={campaignDescription}
-                onChange={(e) => setCampaignDescription(e.target.value)}
-                rows={3}
-                placeholder="Describe your campaign"
-              />
-            </Form.Item>
-          </Card>
-        )}
-
-        {currentStep === 2 && (
-          <Card className="shadow-md p-6">
-            <Form.Item label="Select Ai Email Template">
-              <Select
-                value={selectedTemplate}
-                onChange={handleSelectTemplate}
-                placeholder="Choose Template Type"
-              >
-                {templates &&
-                  templates.length > 0 &&
-                  templates.map((e: any) => (
-                    <Option value={e._id}>{e.templateName}</Option>
-                  ))}
-                <Option value="custom">Custom Template</Option>
-              </Select>
-            </Form.Item>
-            {selectedTemplate === "custom" && (
-              <>
-                <Form.Item label="Template Name" required>
-                  <Input
-                    value={customTemplateName}
-                    onChange={(e) => setCustomTemplateName(e.target.value)}
-                    placeholder="Enter template name"
-                  />
-                </Form.Item>
-                <Form.Item label="Template Purpose" required>
-                  <Input.TextArea
-                    value={customTemplatePurpose}
-                    onChange={(e) => setCustomTemplatePurpose(e.target.value)}
-                    rows={2}
-                    placeholder="Enter purpose of email"
-                  />
-                </Form.Item>
-              </>
-            )}
-            {selectedTemplate === "custom"
-              ? genarted && (
-                  <>
-                    <Form.Item label="Generated Email Subject">
-                      <Input.TextArea
-                        value={emailTemplateSubject}
-                        onChange={(e) =>
-                          setEmailTemplateSubject(e.target.value)
-                        }
-                        rows={1}
-                      />
-                    </Form.Item>
-                    <Form.Item label="Generated Email Content">
-                      <Input.TextArea
-                        value={emailTemplateBody}
-                        onChange={(e) => setEmailTemplateBody(e.target.value)}
-                        rows={8}
-                      />
-                    </Form.Item>
-                    <Form.Item label="Generated Email Closing">
-                      <Input.TextArea
-                        value={emailTemplateClosing}
-                        onChange={(e) =>
-                          setEmailTemplateClosing(e.target.value)
-                        }
-                        rows={1}
-                      />
-                    </Form.Item>
-                    <Form.Item label="Prompt to Change">
-                      <Input
-                        value={promptToChagne}
-                        onChange={(e) => setPromptToChagne(e.target.value)}
-                        placeholder="Please add humaour..."
-                      />
-                    </Form.Item>
-                    <Checkbox
-                      checked={saveTemplate}
-                      onChange={(e) => setSaveTemplate(e.target.checked)}
-                    >
-                      Save Template
-                    </Checkbox>
-                    <br />
-                    <br />
-                  </>
-                )
-              : selectedTemplate != "" && (
-                  <>
-                    <Form.Item label="Generated Email Subject">
-                      <Input.TextArea
-                        value={emailTemplateSubject}
-                        onChange={(e) =>
-                          setEmailTemplateSubject(e.target.value)
-                        }
-                        rows={1}
-                      />
-                    </Form.Item>
-                    <Form.Item label="Generated Email Content">
-                      <Input.TextArea
-                        value={emailTemplateBody}
-                        onChange={(e) => setEmailTemplateBody(e.target.value)}
-                        rows={8}
-                      />
-                    </Form.Item>
-                    <Form.Item label="Generated Email Closing">
-                      <Input.TextArea
-                        value={emailTemplateClosing}
-                        onChange={(e) =>
-                          setEmailTemplateClosing(e.target.value)
-                        }
-                        rows={1}
-                      />
-                    </Form.Item>
-                    <Form.Item label="Prompt to Change">
-                      <Input
-                        value={promptToChagne}
-                        onChange={(e) => setPromptToChagne(e.target.value)}
-                        placeholder="Please add humaour..."
-                      />
-                    </Form.Item>
-                    <Checkbox
-                      checked={saveChanges}
-                      onChange={(e) => setSaveChanges(e.target.checked)}
-                    >
-                      Save Changes
-                    </Checkbox>
-                    <br />
-                    <br />
-                  </>
-                )}
-            {selectedTemplate != "" && (
-              <Button type="primary" onClick={handleGenerateTemplate}>
-                Generate
-              </Button>
-            )}
-          </Card>
-        )}
-        {currentStep === 1 && (
-          <>
-            <Form.Item
-              label="Upload Recipient List (Excel/CSV)"
-              className="mt-4"
-            >
-              <Upload beforeUpload={handleFileUpload} showUploadList={false}>
-                <Button icon={<UploadOutlined />}>Upload File</Button>
-              </Upload>
-            </Form.Item>
-          </>
-        )}
-
-        {/* Step 4: Confirm & Send Emails */}
-        {currentStep === 3 && (
-          <>
-            <p className="font-bold">Campaign Name:</p> <p>{campaignName}</p>
-            <br />
-            <p className="font-bold">Description:</p>{" "}
-            <p>{campaignDescription}</p>
-            <br />
-            <p className="font-bold">Email Template:</p>
-            <p className="mt-2">Subject:</p>
-            <Input.TextArea
-              value={emailTemplateSubject}
-              onChange={(e) => setEmailTemplateSubject(e.target.value)}
-              rows={1}
-              disabled
-            />
-            <p className="mt-2">Body:</p>
-            <Input.TextArea
-              value={emailTemplateBody}
-              onChange={(e) => setEmailTemplateBody(e.target.value)}
-              rows={8}
-              disabled
-            />
-            <p className="mt-2">Closing:</p>
-            <Input.TextArea
-              value={emailTemplateClosing}
-              onChange={(e) => setEmailTemplateClosing(e.target.value)}
-              disabled
-              rows={1}
-            />
-            <p className="font-bold mt-4">Recipients Count:</p>{" "}
-            <p>{fileData.length}</p>
-          </>
-        )}
-        <div className="flex justify-between mt-4">
-          {currentStep > 0 && (
-            <Button onClick={() => setCurrentStep(currentStep - 1)}>
-              Back
-            </Button>
-          )}
-          {currentStep < steps.length - 1 ? (
-            <Button
-              type="primary"
-              onClick={() => ChangeSteps(currentStep)}
-              icon={<ArrowRightOutlined />}
-            >
-              Next
-            </Button>
-          ) : (
-            <Button type="primary" onClick={handleSendEmails}>
-              Send Emails
-            </Button>
-          )}
-        </div>
-      </Form>
-      {loading && <CustomLoader />}
-    </Modal>
-  );
+  async function selectTemplate(value: string) {
+    setSelected(value); setSaveTemplate(false); setUpdateTemplate(false); setError('');
+    setEmail({ subject: '', body: '', closing: '' }); setPurpose(''); setChanges('');
+    if (value === 'custom') return;
+    setLoading(true);
+    try {
+      const { data } = await api.get(`/templates/getById/${value}`);
+      setEmail({ subject: data.emailSubject, body: data.emailBody, closing: data.emailClosing }); setPurpose(data.templatePurpose);
+    } catch (error) { setError(errorMessage(error)); }
+    finally { setLoading(false); }
+  }
+  async function upload(file: RcFile) {
+    setError(''); setRows([]); setFilename('');
+    if (!/\.(xlsx|xls|csv)$/i.test(file.name) || file.size > 2 * 1024 * 1024) { setError('Choose an Excel or CSV file under 2 MB.'); return false; }
+    setLoading(true);
+    try {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false, sheetRows: 1002 });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!sheet) throw new Error('The workbook has no worksheets.');
+      setRows(normalizeRows(XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' }))); setFilename(file.name);
+    } catch (error) { setError(error instanceof Error ? error.message : 'Could not read this spreadsheet.'); }
+    finally { setLoading(false); }
+    return false;
+  }
+  async function generate(revise: boolean) {
+    if (!purpose.trim() || (revise && !changes.trim())) { setError(revise ? 'Describe the changes you want.' : 'Enter an email purpose.'); return; }
+    setLoading(true); setError('');
+    try {
+      const { data } = await api.post(revise ? '/email/makeChanges' : '/email/generate', revise
+        ? { emailPurpose: purpose, emailBody: email.body, emailSubject: email.subject, emailClosing: email.closing, promptTochange: changes }
+        : { emailPurpose: purpose, templatePlaceholders: Object.keys(rows[0] || {}) });
+      setEmail(data.emailContent);
+    } catch (error) { setError(errorMessage(error)); }
+    finally { setLoading(false); }
+  }
+  function next() {
+    setError('');
+    if (step === 0 && (!name.trim() || !description.trim())) { setError('Enter a campaign name and description.'); return; }
+    if (step === 1 && !rows.length) { setError('Upload a recipient spreadsheet first.'); return; }
+    if (step === 2) {
+      if (Object.values(email).some(value => !value.trim())) { setError('Enter a subject, email body, and closing.'); return; }
+      if (saveTemplate && (!templateName.trim() || !purpose.trim())) { setError('Enter a template name and purpose to save this template.'); return; }
+    }
+    setStep(value => value + 1);
+  }
+  async function send() {
+    setLoading(true); setError('');
+    try {
+      // Queue the campaign once. Optional template saving is handled separately so a failed save cannot duplicate a campaign.
+      await api.post('/campaigns/create', { campaignName: name, description, emailTemplateSubject: email.subject, emailTemplateBody: email.body, emailTemplateClosing: email.closing, recipients: rows }, { headers: { 'Idempotency-Key': requestId } });
+      if (saveTemplate || updateTemplate) {
+        try {
+          const payload = { templateName, templatePurpose: purpose, emailSubject: email.subject, emailBody: email.body, emailClosing: email.closing };
+          if (saveTemplate) await api.post('/templates/create', payload);
+          else await api.put(`/templates/update/${selected}`, { emailSubject: email.subject, emailBody: email.body, emailClosing: email.closing });
+        } catch { toast.error('Campaign queued, but the template could not be saved.'); }
+      }
+      toast.success(`Campaign queued for ${rows.length} recipients`); onCreated();
+    } catch (error) { setError(errorMessage(error)); }
+    finally { setLoading(false); }
+  }
+  return <Modal title="Create a campaign" open={visible} onCancel={onClose} width={760} footer={null} closable={!loading} maskClosable={!loading} keyboard={!loading}>
+    <Steps current={step} size="small" responsive items={['Details', 'Recipients', 'Email', 'Review'].map(title => ({ title }))} className="mb-6 mt-4" />
+    {error && <Alert role="alert" type="error" showIcon message={error} className="mb-4" />}
+    <Spin spinning={loading}><Form layout="vertical" disabled={loading}>
+      {step === 0 && <><Form.Item label="Campaign name" required><Input aria-label="Campaign name" value={name} maxLength={200} onChange={event => setName(event.target.value)} /></Form.Item><Form.Item label="Description" required><Input.TextArea aria-label="Description" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></Form.Item></>}
+      {step === 1 && <><Typography.Paragraph>Upload an Excel or CSV file with an <strong>Email</strong> column. Other columns become placeholders such as {'{{First Name}}'}. Maximum 1,000 recipients and 2 MB.</Typography.Paragraph><Upload accept=".xlsx,.xls,.csv" beforeUpload={upload} showUploadList={false} disabled={loading}><Button icon={<UploadOutlined />}>Choose spreadsheet</Button></Upload>{filename && <><p className="my-4 break-all">{filename} · {rows.length} recipients</p><Table<Recipient> size="small" rowKey="email" scroll={{ x: 480 }} dataSource={rows.slice(0, 5)} pagination={false} columns={Object.keys(rows[0]).map(key => ({ title: key, dataIndex: key, key }))} /><Typography.Text type="secondary">Preview of the first five recipients.</Typography.Text></>}</>}
+      {step === 2 && <>
+        <Form.Item label="Start from"><Select value={selected} onChange={selectTemplate} options={[{ value: 'custom', label: 'New template' }, ...templates.map(template => ({ value: template._id, label: template.templateName }))]} /></Form.Item>
+        <Form.Item label="Email purpose"><Input.TextArea aria-label="Email purpose" value={purpose} onChange={event => setPurpose(event.target.value)} rows={2} maxLength={4000} placeholder="Describe your offer and audience, or enter the email below." /></Form.Item>
+        <Button className="mb-4" onClick={() => generate(false)} loading={loading}>Generate with AI</Button>
+        <EmailFields value={email} onChange={setEmail} />
+        <Form.Item label="Ask AI to revise this email"><Input.TextArea value={changes} onChange={event => setChanges(event.target.value)} rows={2} maxLength={4000} placeholder="For example: make the call to action shorter." /></Form.Item>
+        <Button className="mb-4" onClick={() => generate(true)} disabled={Object.values(email).some(value => !value.trim())}>Apply AI changes</Button>
+        {selected === 'custom' ? <><Checkbox checked={saveTemplate} onChange={event => setSaveTemplate(event.target.checked)}>Save as a reusable template</Checkbox>{saveTemplate && <Form.Item label="Template name" required className="mt-4"><Input value={templateName} onChange={event => setTemplateName(event.target.value)} /></Form.Item>}</> : <Checkbox checked={updateTemplate} onChange={event => setUpdateTemplate(event.target.checked)}>Update the saved template with these changes</Checkbox>}
+      </>}
+      {step === 3 && <><Typography.Title level={4}>{name}</Typography.Title><p className="mb-4 break-words">{description}</p><Alert type="info" showIcon message={`${rows.length} recipients. Emails will be queued and delivered on the server schedule.`} className="mb-4" /><div className="email-preview"><strong>{email.subject}</strong><p className="my-4">{email.body}</p><p>{email.closing}</p></div></>}
+      <div className="modal-actions"><Button onClick={() => step > 0 ? setStep(value => value - 1) : onClose()} disabled={loading}>{step ? 'Back' : 'Cancel'}</Button>{step < 3 ? <Button type="primary" onClick={next}>Next</Button> : <Button type="primary" onClick={send} loading={loading}>Queue campaign</Button>}</div>
+    </Form></Spin>
+  </Modal>;
 }
