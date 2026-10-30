@@ -83,8 +83,9 @@ test('campaign upload, validation, failure and idempotent retry', async ({ page 
   const keys: string[] = [];
   await page.route('**/campaigns/create', async route => {
     keys.push(route.request().headers()['idempotency-key']);
-    await route.fulfill({ status: keys.length === 1 ? 500 : 201, json: keys.length === 1 ? { message: 'Delivery is not configured' } : { message: 'Queued' }, headers: { 'Access-Control-Allow-Origin': '*' } });
+    await route.fulfill({ status: keys.length === 1 ? 500 : 201, json: keys.length === 1 ? { message: 'Delivery is not configured' } : { campaign: { _id: 'new-campaign' } }, headers: { 'Access-Control-Allow-Origin': '*' } });
   });
+  await page.route('**/campaigns/new-campaign/process', route => route.fulfill({ json: { campaign: { status: 'sent' }, message: 'Campaign sent' }, headers: { 'Access-Control-Allow-Origin': '*' } }));
   await page.goto('/email-campaigns');
   await page.getByRole('button', { name: 'New campaign' }).click();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -99,10 +100,10 @@ test('campaign upload, validation, failure and idempotent retry', async ({ page 
   await page.getByRole('textbox', { name: 'Email body' }).fill('Welcome to the launch.');
   await page.getByRole('textbox', { name: 'Closing', exact: true }).fill('Regards');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await page.getByRole('button', { name: 'Queue campaign' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Send now', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Delivery is not configured' })).toBeVisible();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: 'Queue campaign' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Send now', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(keys).toHaveLength(2); expect(keys[0]).toBeTruthy(); expect(keys[0]).toBe(keys[1]);
 });
@@ -114,4 +115,70 @@ test('expired session redirects to sign in', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('x-ai-sales-mail-token', 'test-session'));
   await page.goto('/email-campaigns');
   await expect(page).toHaveURL(/\/auth\/login$/);
+});
+
+async function openReview(page: Page) {
+  await page.goto('/email-campaigns');
+  await page.getByRole('button', { name: 'New campaign' }).click();
+  await page.getByRole('textbox', { name: 'Campaign name' }).fill('Scheduled campaign');
+  await page.getByRole('textbox', { name: 'Description', exact: true }).fill('Choose a send time');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.locator('input[type=file]').setInputFiles({ name: 'recipients.csv', mimeType: 'text/csv', buffer: Buffer.from('Email,First Name\nalice@example.com,Alice') });
+  await expect(page.getByText('1 recipients', { exact: false }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Subject', exact: true }).fill('Hello {{First Name}}');
+  await page.getByRole('textbox', { name: 'Email body' }).fill('Your scheduled message.');
+  await page.getByRole('textbox', { name: 'Closing', exact: true }).fill('Regards');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+}
+
+test('scheduling converts the chosen Pakistan time to UTC without sending early', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await mockApi(page); await loginState(page);
+  let sendTime: unknown;
+  let processed = false;
+  await page.route('**/campaigns/create', async route => {
+    sendTime = route.request().postDataJSON().scheduledAt;
+    await route.fulfill({ status: 201, json: { campaign: { _id: 'scheduled-campaign', scheduledAt: sendTime } }, headers: { 'Access-Control-Allow-Origin': '*' } });
+  });
+  await page.route('**/campaigns/*/process', async route => { processed = true; await route.fulfill({ json: {} }); });
+  await openReview(page);
+  await page.getByRole('radio', { name: 'Schedule for later' }).check();
+  await page.getByLabel('Send date and time', { exact: true }).fill('2035-01-01T13:00');
+  await expect(page.getByText('Your timezone: Asia/Karachi')).toBeVisible();
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('scheduled-review-mobile.png'), fullPage: true, animations: 'disabled' });
+  await page.getByRole('button', { name: 'Schedule campaign', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(sendTime).toBe('2035-01-01T08:00:00.000Z'); expect(processed).toBe(false);
+});
+
+test('past send times are rejected without submitting the campaign', async ({ page }) => {
+  await mockApi(page); await loginState(page);
+  let submitted = false;
+  await page.route('**/campaigns/create', async route => { submitted = true; await route.fulfill({ json: {} }); });
+  await openReview(page);
+  await page.getByRole('radio', { name: 'Schedule for later' }).check();
+  await page.getByLabel('Send date and time', { exact: true }).fill('2000-01-01T13:00');
+  await page.getByRole('button', { name: 'Schedule campaign', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Choose a valid send date and time in the future.' })).toBeVisible();
+  expect(submitted).toBe(false);
+});
+
+test('queued campaigns can be rescheduled from the list', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 812 });
+  await mockApi(page); await loginState(page);
+  let sendTime: unknown;
+  await page.route('**/campaigns/bbbbbbbbbbbbbbbbbbbbbbbb/schedule', async route => {
+    sendTime = route.request().postDataJSON().scheduledAt;
+    await route.fulfill({ json: { message: 'Send time updated' }, headers: { 'Access-Control-Allow-Origin': '*' } });
+  });
+  await page.goto('/email-campaigns');
+  await page.getByRole('button', { name: 'Change send time', exact: true }).click();
+  await page.getByLabel('Send date and time', { exact: true }).fill('2035-01-01T18:30');
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('reschedule-mobile.png'), fullPage: true, animations: 'disabled' });
+  await page.getByRole('button', { name: 'Save send time' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(sendTime).toBe('2035-01-01T13:30:00.000Z');
 });

@@ -4,6 +4,9 @@ export interface Campaign {
   campaignName: string;
   description: string;
   status: string;
+  scheduledAt?: string | null;
+  lastProcessedAt?: string | null;
+  lastDeliveryError?: string | null;
   totalEmailSent: number;
   totalEmailOpened: number;
   totalEmailReplied: number;

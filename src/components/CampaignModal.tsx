@@ -7,6 +7,9 @@ import { api, errorMessage } from '../config';
 import type { EmailContent, ModalProps, TemplateSummary } from '../types';
 import { normalizeRows, type Recipient } from '../utils/recipients';
 import EmailFields from './EmailFields';
+import SendTimePicker from './SendTimePicker';
+import { displaySendTime, localDateTime, scheduledTime } from '../utils/schedule';
+import { processCampaign } from '../utils/delivery';
 interface Props extends ModalProps { onCreated: () => void }
 export default function CreateCampaignModal({ visible, onClose, onCreated }: Props) {
   const [step, setStep] = useState(0);
@@ -25,6 +28,8 @@ export default function CreateCampaignModal({ visible, onClose, onCreated }: Pro
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [requestId] = useState(() => crypto.randomUUID());
+  const [sendLater, setSendLater] = useState(false);
+  const [sendAt, setSendAt] = useState(localDateTime(new Date(Date.now() + 5 * 60000)));
   useEffect(() => {
     const controller = new AbortController();
     api.get('/templates/getAll/names', { signal: controller.signal }).then(({ data }) => setTemplates(data)).catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); });
@@ -77,10 +82,13 @@ export default function CreateCampaignModal({ visible, onClose, onCreated }: Pro
     setStep(value => value + 1);
   }
   async function send() {
+    let scheduledAt: string | null;
+    try { scheduledAt = sendLater ? scheduledTime(sendAt) : null; }
+    catch (error) { setError(error instanceof Error ? error.message : 'Invalid send time'); return; }
     setLoading(true); setError('');
     try {
       // Queue the campaign once. Optional template saving is handled separately so a failed save cannot duplicate a campaign.
-      await api.post('/campaigns/create', { campaignName: name, description, emailTemplateSubject: email.subject, emailTemplateBody: email.body, emailTemplateClosing: email.closing, recipients: rows }, { headers: { 'Idempotency-Key': requestId } });
+      const { data } = await api.post('/campaigns/create', { campaignName: name, description, emailTemplateSubject: email.subject, emailTemplateBody: email.body, emailTemplateClosing: email.closing, recipients: rows, scheduledAt }, { headers: { 'Idempotency-Key': requestId } });
       if (saveTemplate || updateTemplate) {
         try {
           const payload = { templateName, templatePurpose: purpose, emailSubject: email.subject, emailBody: email.body, emailClosing: email.closing };
@@ -88,7 +96,12 @@ export default function CreateCampaignModal({ visible, onClose, onCreated }: Pro
           else await api.put(`/templates/update/${selected}`, { emailSubject: email.subject, emailBody: email.body, emailClosing: email.closing });
         } catch { toast.error('Campaign queued, but the template could not be saved.'); }
       }
-      toast.success(`Campaign queued for ${rows.length} recipients`); onCreated();
+      if (sendLater) toast.success(`Campaign scheduled: ${displaySendTime(data.campaign?.scheduledAt || scheduledAt)}`);
+      else {
+        try { await processCampaign(data.campaign._id); }
+        catch (error) { toast.error(`Campaign saved. ${errorMessage(error)}`); }
+      }
+      onCreated();
     } catch (error) { setError(errorMessage(error)); }
     finally { setLoading(false); }
   }
@@ -107,8 +120,8 @@ export default function CreateCampaignModal({ visible, onClose, onCreated }: Pro
         <Button className="mb-4" onClick={() => generate(true)} disabled={Object.values(email).some(value => !value.trim())}>Apply AI changes</Button>
         {selected === 'custom' ? <><Checkbox checked={saveTemplate} onChange={event => setSaveTemplate(event.target.checked)}>Save as a reusable template</Checkbox>{saveTemplate && <Form.Item label="Template name" required className="mt-4"><Input value={templateName} onChange={event => setTemplateName(event.target.value)} /></Form.Item>}</> : <Checkbox checked={updateTemplate} onChange={event => setUpdateTemplate(event.target.checked)}>Update the saved template with these changes</Checkbox>}
       </>}
-      {step === 3 && <><Typography.Title level={4}>{name}</Typography.Title><p className="mb-4 break-words">{description}</p><Alert type="info" showIcon message={`${rows.length} recipients. Emails will be queued and delivered on the server schedule.`} className="mb-4" /><div className="email-preview"><strong>{email.subject}</strong><p className="my-4">{email.body}</p><p>{email.closing}</p></div></>}
-      <div className="modal-actions"><Button onClick={() => step > 0 ? setStep(value => value - 1) : onClose()} disabled={loading}>{step ? 'Back' : 'Cancel'}</Button>{step < 3 ? <Button type="primary" onClick={next}>Next</Button> : <Button type="primary" onClick={send} loading={loading}>Queue campaign</Button>}</div>
+      {step === 3 && <><Typography.Title level={4}>{name}</Typography.Title><p className="mb-4 break-words">{description}</p><Alert type="info" showIcon message={`${rows.length} recipients. Each recipient is sent the personalized email below.`} className="mb-4" /><SendTimePicker later={sendLater} value={sendAt} onLaterChange={setSendLater} onChange={setSendAt} /><div className="email-preview"><strong>{email.subject}</strong><p className="my-4">{email.body}</p><p>{email.closing}</p></div></>}
+      <div className="modal-actions"><Button onClick={() => step > 0 ? setStep(value => value - 1) : onClose()} disabled={loading}>{step ? 'Back' : 'Cancel'}</Button>{step < 3 ? <Button type="primary" onClick={next}>Next</Button> : <Button type="primary" onClick={send} loading={loading}>{sendLater ? 'Schedule campaign' : 'Send now'}</Button>}</div>
     </Form></Spin>
   </Modal>;
 }
