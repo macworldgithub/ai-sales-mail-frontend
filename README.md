@@ -6,7 +6,7 @@ React 19, TypeScript, Vite, and Ant Design. Includes responsive navigation, real
 
 Use Node.js 22. Run `npm ci`, copy `.env.example` to `.env.local`, and run `npm run dev`. Start the backend separately on port 5921.
 
-The example `VITE_API_URL` points to `https://ai-sales-backend.omnisuiteai.com`. Set that value on the deployed frontend after the VPS is ready. The source fallback retains the previous Vercel API during the migration. Do not append `/api`: the backend has separate route groups such as `/campaigns` and `/api/auth`. For local development, set it to `http://localhost:5921` and add `http://localhost:5173` to the local backend's `FRONTEND_URL`.
+The example `VITE_API_URL` and source fallback point to `https://ai-sales-backend.omnisuiteai.com`. Set that value on the deployed frontend too: an existing Vercel environment variable overrides the fallback. Do not append `/api`: the backend has separate route groups such as `/campaigns` and `/api/auth`. For local development, set it to `http://localhost:5921` and add `http://localhost:5173` to the local backend's `FRONTEND_URL`.
 
 ## Deploy on Vercel
 

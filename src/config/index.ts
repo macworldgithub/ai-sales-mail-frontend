@@ -1,6 +1,6 @@
 import axios from 'axios';
 export const TOKEN_KEY = 'x-ai-sales-mail-token';
-export const SERVER_URL = (import.meta.env.VITE_API_URL || 'https://ai-sales-mail-backend-ten.vercel.app').replace(/\/$/, '');
+export const SERVER_URL = (import.meta.env.VITE_API_URL || 'https://ai-sales-backend.omnisuiteai.com').replace(/\/$/, '');
 export const api = axios.create({ baseURL: SERVER_URL, timeout: 60000 });
 api.interceptors.request.use(config => {
   const token = localStorage.getItem(TOKEN_KEY);
