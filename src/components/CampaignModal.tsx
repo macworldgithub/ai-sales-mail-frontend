@@ -23,6 +23,12 @@ export default function CreateCampaignModal({ visible, onClose, onCreated }: Pro
   const [purpose, setPurpose] = useState('');
   const [changes, setChanges] = useState('');
   const [email, setEmail] = useState<EmailContent>({ subject: '', body: '', closing: '' });
+  const [previewRecipient, setPreviewRecipient] = useState(0);
+  const [preview, setPreview] = useState<EmailContent | null>(null);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const [saveTemplate, setSaveTemplate] = useState(false);
   const [updateTemplate, setUpdateTemplate] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -35,6 +41,16 @@ export default function CreateCampaignModal({ visible, onClose, onCreated }: Pro
     api.get('/templates/getAll/names', { signal: controller.signal }).then(({ data }) => setTemplates(data)).catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); });
     return () => controller.abort();
   }, []);
+  useEffect(() => {
+    if (step !== 3 || !rows[previewRecipient]) return;
+    const controller = new AbortController();
+    setPreview(null); setMissingFields([]); setPreviewLoading(true); setPreviewError('');
+    api.post('/email/preview', { ...email, recipient: rows[previewRecipient] }, { signal: controller.signal })
+      .then(({ data }) => { setPreview(data.emailContent); setMissingFields(data.missingFields); })
+      .catch(error => { if (!controller.signal.aborted) setPreviewError(errorMessage(error)); })
+      .finally(() => { if (!controller.signal.aborted) setPreviewLoading(false); });
+    return () => controller.abort();
+  }, [step, rows, previewRecipient, email, previewAttempt]);
   async function selectTemplate(value: string) {
     setSelected(value); setSaveTemplate(false); setUpdateTemplate(false); setError('');
     setEmail({ subject: '', body: '', closing: '' }); setPurpose(''); setChanges('');
@@ -47,7 +63,7 @@ export default function CreateCampaignModal({ visible, onClose, onCreated }: Pro
     finally { setLoading(false); }
   }
   async function upload(file: RcFile) {
-    setError(''); setRows([]); setFilename('');
+    setError(''); setRows([]); setFilename(''); setPreviewRecipient(0);
     if (!/\.(xlsx|xls|csv)$/i.test(file.name) || file.size > 2 * 1024 * 1024) { setError('Choose an Excel or CSV file under 2 MB.'); return false; }
     setLoading(true);
     try {
@@ -66,7 +82,7 @@ export default function CreateCampaignModal({ visible, onClose, onCreated }: Pro
     try {
       const { data } = await api.post(revise ? '/email/makeChanges' : '/email/generate', revise
         ? { emailPurpose: purpose, emailBody: email.body, emailSubject: email.subject, emailClosing: email.closing, promptTochange: changes }
-        : { emailPurpose: purpose, templatePlaceholders: Object.keys(rows[0] || {}) });
+        : { emailPurpose: purpose, templatePlaceholders: [...new Set(rows.flatMap(row => Object.keys(row)))].filter(key => rows.some(row => row[key]?.trim())) });
       setEmail(data.emailContent);
     } catch (error) { setError(errorMessage(error)); }
     finally { setLoading(false); }
@@ -82,6 +98,7 @@ export default function CreateCampaignModal({ visible, onClose, onCreated }: Pro
     setStep(value => value + 1);
   }
   async function send() {
+    if (!preview || previewLoading || previewError) { setError('Review the recipient preview before sending.'); return; }
     let scheduledAt: string | null;
     try { scheduledAt = sendLater ? scheduledTime(sendAt) : null; }
     catch (error) { setError(error instanceof Error ? error.message : 'Invalid send time'); return; }
@@ -120,8 +137,8 @@ export default function CreateCampaignModal({ visible, onClose, onCreated }: Pro
         <Button className="mb-4" onClick={() => generate(true)} disabled={Object.values(email).some(value => !value.trim())}>Apply AI changes</Button>
         {selected === 'custom' ? <><Checkbox checked={saveTemplate} onChange={event => setSaveTemplate(event.target.checked)}>Save as a reusable template</Checkbox>{saveTemplate && <Form.Item label="Template name" required className="mt-4"><Input value={templateName} onChange={event => setTemplateName(event.target.value)} /></Form.Item>}</> : <Checkbox checked={updateTemplate} onChange={event => setUpdateTemplate(event.target.checked)}>Update the saved template with these changes</Checkbox>}
       </>}
-      {step === 3 && <><Typography.Title level={4}>{name}</Typography.Title><p className="mb-4 break-words">{description}</p><Alert type="info" showIcon message={`${rows.length} recipients. Each recipient is sent the personalized email below.`} className="mb-4" /><SendTimePicker later={sendLater} value={sendAt} onLaterChange={setSendLater} onChange={setSendAt} /><div className="email-preview"><strong>{email.subject}</strong><p className="my-4">{email.body}</p><p>{email.closing}</p></div></>}
-      <div className="modal-actions"><Button onClick={() => step > 0 ? setStep(value => value - 1) : onClose()} disabled={loading}>{step ? 'Back' : 'Cancel'}</Button>{step < 3 ? <Button type="primary" onClick={next}>Next</Button> : <Button type="primary" onClick={send} loading={loading}>{sendLater ? 'Schedule campaign' : 'Send now'}</Button>}</div>
+      {step === 3 && <><Typography.Title level={4}>{name}</Typography.Title><p className="mb-4 break-words">{description}</p><Alert type="info" showIcon message={`${rows.length} recipients. Choose a recipient to review their personalized email. Missing details use a neutral greeting; sentences requiring those details are omitted.`} className="mb-4" /><Form.Item label="Preview recipient"><Select aria-label="Preview recipient" value={previewRecipient} onChange={setPreviewRecipient} showSearch optionFilterProp="label" options={rows.map((row, index) => ({ value: index, label: row.email }))} /></Form.Item>{missingFields.length > 0 && <Alert type="warning" showIcon message={`Unavailable details for this recipient: ${missingFields.join(', ')}. The preview below uses professional fallbacks.`} className="mb-4" />}{previewError && <Alert type="error" showIcon message={previewError} action={<Button onClick={() => setPreviewAttempt(value => value + 1)}>Retry preview</Button>} className="mb-4" />}<SendTimePicker later={sendLater} value={sendAt} onLaterChange={setSendLater} onChange={setSendAt} /><Spin spinning={previewLoading}><div className="email-preview" aria-label="Personalized email preview">{preview ? <><strong>{preview.subject}</strong><p className="my-4">{preview.body}</p><p>{preview.closing}</p></> : <Typography.Text type="secondary">Preparing recipient preview…</Typography.Text>}</div></Spin></>}
+      <div className="modal-actions"><Button onClick={() => step > 0 ? setStep(value => value - 1) : onClose()} disabled={loading}>{step ? 'Back' : 'Cancel'}</Button>{step < 3 ? <Button type="primary" onClick={next}>Next</Button> : <Button type="primary" onClick={send} loading={loading} disabled={!preview || previewLoading || !!previewError}>{sendLater ? 'Schedule campaign' : 'Send now'}</Button>}</div>
     </Form></Spin>
   </Modal>;
 }

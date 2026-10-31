@@ -11,6 +11,10 @@ async function mockApi(page: Page) {
     if (url.pathname === '/campaigns/total') data = { totalCampaigns: 2, totalEmailsSent: 10, totalOpened: 4 };
     else if (url.pathname === '/templates/total') data = { total: 1 };
     else if (url.pathname === '/templates/getAll/names') data = [];
+    else if (url.pathname === '/email/preview' && route.request().method() === 'POST') {
+      const input = route.request().postDataJSON();
+      data = { emailContent: { subject: input.subject.replace('{{First Name}}', input.recipient['First Name'] || ''), body: input.body, closing: input.closing }, missingFields: [] };
+    }
     else if (url.pathname === '/campaigns/getAll') { const search = url.searchParams.get('search')?.toLowerCase() || ''; const filtered = campaigns.filter(c => c.campaignName.toLowerCase().includes(search)); data = { campaigns: filtered, total: filtered.length }; }
     else if (url.pathname.startsWith('/api/auth/')) data = { token: 'test-session' };
     await route.fulfill({ json: data, headers: { 'Access-Control-Allow-Origin': '*' } });
@@ -115,6 +119,54 @@ test('expired session redirects to sign in', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('x-ai-sales-mail-token', 'test-session'));
   await page.goto('/email-campaigns');
   await expect(page).toHaveURL(/\/auth\/login$/);
+});
+
+test('review shows the server-rendered email for each recipient, including missing details', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await mockApi(page); await loginState(page);
+  await page.route('**/email/preview', async route => {
+    const input = route.request().postDataJSON();
+    const known = input.recipient.email === 'alice@example.com';
+    await route.fulfill({ json: { emailContent: { subject: known ? 'An offer for Alice' : 'An offer', body: known ? 'Dear Alice,\n\nWe can help your team.' : 'Hello,\n\nWe can help your team.', closing: 'Best regards,\nsales@example.com' }, missingFields: known ? [] : ['First Name', 'Designation'] }, headers: { 'Access-Control-Allow-Origin': '*' } });
+  });
+  await page.goto('/email-campaigns');
+  await page.getByRole('button', { name: 'New campaign' }).click();
+  await page.getByRole('textbox', { name: 'Campaign name' }).fill('Optional contacts');
+  await page.getByRole('textbox', { name: 'Description', exact: true }).fill('Professional greetings');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.locator('input[type=file]').setInputFiles({ name: 'recipients.csv', mimeType: 'text/csv', buffer: Buffer.from('Email,First Name\ncontact@example.com,\nalice@example.com,Alice') });
+  await expect(page.getByText('2 recipients', { exact: false }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Subject', exact: true }).fill('An offer for {{First Name}}');
+  await page.getByRole('textbox', { name: 'Email body' }).fill('Dear {{First Name}},\n\nWe can help your team. Your designation is {{Designation}}.');
+  await page.getByRole('textbox', { name: 'Closing', exact: true }).fill('Best regards,\n{{First Name}}');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  const preview = page.getByLabel('Personalized email preview');
+  await expect(preview).toContainText('Hello,');
+  await expect(preview).toContainText('sales@example.com');
+  await expect(preview).not.toContainText('{{');
+  await expect(page.getByRole('alert').filter({ hasText: 'Unavailable details' })).toContainText('Designation');
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('missing-contact-preview-mobile.png'), fullPage: true, animations: 'disabled' });
+  await page.locator('.ant-select').filter({ has: page.getByRole('combobox', { name: 'Preview recipient' }) }).locator('.ant-select-selector').click();
+  await page.locator('.ant-select-item-option-content').filter({ hasText: 'alice@example.com' }).click();
+  await expect(preview).toContainText('Dear Alice,');
+  await expect(page.getByRole('alert').filter({ hasText: 'Unavailable details' })).toHaveCount(0);
+});
+
+test('preview failures prevent sending and can be retried', async ({ page }) => {
+  await mockApi(page); await loginState(page);
+  let attempts = 0;
+  await page.route('**/email/preview', async route => {
+    attempts++;
+    await route.fulfill({ status: attempts === 1 ? 503 : 200, json: attempts === 1 ? { message: 'Preview temporarily unavailable' } : { emailContent: { subject: 'Hello Alice', body: 'Your scheduled message.', closing: 'Regards' }, missingFields: [] }, headers: { 'Access-Control-Allow-Origin': '*' } });
+  });
+  await openReview(page);
+  await expect(page.getByRole('alert').filter({ hasText: 'Preview temporarily unavailable' })).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Send now', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Retry preview' }).click();
+  await expect(page.getByLabel('Personalized email preview')).toContainText('Hello Alice');
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Send now', exact: true })).toBeEnabled();
 });
 
 async function openReview(page: Page) {
