@@ -1,7 +1,7 @@
-import { Form, Input } from 'antd';
+import { Checkbox, Form, Input } from 'antd';
 import type { EmailContent } from '../types';
 export default function EmailFields({ value, onChange }: { value: EmailContent; onChange: (value: EmailContent) => void }) {
   return <>{(['subject', 'body', 'closing'] as const).map(key => <Form.Item key={key} label={key === 'subject' ? 'Subject' : key === 'body' ? 'Email body' : 'Closing'} required>
     <Input.TextArea aria-label={key === 'body' ? 'Email body' : key === 'subject' ? 'Subject' : 'Closing'} value={value[key]} onChange={event => onChange({ ...value, [key]: event.target.value })} autoSize={{ minRows: key === 'body' ? 6 : 1, maxRows: key === 'body' ? 14 : 4 }} maxLength={20000} />
-  </Form.Item>)}</>;
+  </Form.Item>)}<Form.Item><Checkbox checked={value.signatureId === 'event-transportation'} onChange={event => onChange({ ...value, signatureId: event.target.checked ? 'event-transportation' : null })}>Include Event Transportation signature and logo</Checkbox></Form.Item></>;
 }

@@ -1,4 +1,4 @@
-export interface EmailContent { subject: string; body: string; closing: string }
+export interface EmailContent { subject: string; body: string; closing: string; signatureId?: string | null }
 export interface Campaign {
   _id: string;
   campaignName: string;
@@ -7,6 +7,10 @@ export interface Campaign {
   scheduledAt?: string | null;
   lastProcessedAt?: string | null;
   lastDeliveryError?: string | null;
+  chunkSize?: number | null;
+  chunkGapSeconds?: number | null;
+  currentChunk?: number;
+  nextChunkAt?: string | null;
   totalEmailSent: number;
   totalEmailOpened: number;
   totalEmailReplied: number;

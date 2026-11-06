@@ -20,23 +20,23 @@ export default function AutomationModal({ campaign, mode, onClose, onSaved }: Pr
     api.get(`${base}/${followUp ? 'getFollowUpByCompaignId' : 'getAutomationByCompaignId'}/${campaign._id}`, { signal: controller.signal })
       .then(({ data }) => {
         if (!data[0]) { setError('No saved template found. Enter a template or generate one.'); return; }
-        setEmail({ subject: data[0].emailTemplateSubject, body: data[0].emailTemplateBody, closing: data[0].emailTemplateClosing });
+        setEmail({ subject: data[0].emailTemplateSubject, body: data[0].emailTemplateBody, closing: data[0].emailTemplateClosing, signatureId: data[0].emailSignatureId });
       }).catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [base, campaign._id, enabled, followUp]);
   async function generate() {
     setLoading(true); setError('');
-    try { const { data } = await api.post(`/email/${followUp ? 'generateAutomatedFollowUpEmail' : 'generateAutomatedEmail'}`, { campaignId: campaign._id }); setEmail(data.emailContent); }
+    try { const { data } = await api.post(`/email/${followUp ? 'generateAutomatedFollowUpEmail' : 'generateAutomatedEmail'}`, { campaignId: campaign._id }); setEmail({ ...data.emailContent, signatureId: email.signatureId }); }
     catch (error) { setError(errorMessage(error)); }
     finally { setLoading(false); }
   }
   async function save() {
-    if (Object.values(email).some(value => !value.trim())) { setError('Enter a subject, email body, and closing.'); return; }
+    if ([email.subject, email.body, email.closing].some(value => !value.trim())) { setError('Enter a subject, email body, and closing.'); return; }
     if (followUp && (!days || !Number.isInteger(days) || days < 1 || days > 365)) { setError('Choose a whole number between 1 and 365 days.'); return; }
     setLoading(true); setError('');
     try {
-      const payload = { campaignId: campaign._id, emailTemplateSubject: email.subject, emailTemplateBody: email.body, emailTemplateClosing: email.closing, ...(followUp ? { followUpDuration: days } : {}) };
+      const payload = { campaignId: campaign._id, emailTemplateSubject: email.subject, emailTemplateBody: email.body, emailTemplateClosing: email.closing, emailSignatureId: email.signatureId, ...(followUp ? { followUpDuration: days } : {}) };
       const action = enabled ? followUp ? 'updateFollowUp' : 'updateAutomatedReply' : followUp ? 'enableFollowUp' : 'enableAutomation';
       await api.request({ method: enabled ? 'put' : 'post', url: `${base}/${action}${enabled ? `/${campaign._id}` : ''}`, data: payload });
       toast.success(followUp ? 'Follow-up saved' : 'Automated reply saved'); onSaved();

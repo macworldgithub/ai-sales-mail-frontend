@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { normalizeRows } from '../src/utils/recipients';
+import { normalizeRows, parseRecipientRows } from '../src/utils/recipients';
 const campaigns = [
   { _id: 'aaaaaaaaaaaaaaaaaaaaaaaa', campaignName: 'Product launch', description: 'New product', status: 'sent', totalEmailSent: 10, totalEmailOpened: 4, totalEmailReplied: 2, isAutomatedReply: false, hasFollowUp: false, followUpDuration: null },
   { _id: 'bbbbbbbbbbbbbbbbbbbbbbbb', campaignName: 'Winter update', description: 'Quarterly news', status: 'queued', totalEmailSent: 0, totalEmailOpened: 0, totalEmailReplied: 0, isAutomatedReply: false, hasFollowUp: false, followUpDuration: null },
@@ -26,11 +26,49 @@ async function loginState(page: Page) {
 async function noOverflow(page: Page) {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 }
-test('recipient imports reject duplicates and invalid addresses', () => {
+test('recipient imports skip missing and duplicate addresses and reject malformed addresses', () => {
   expect(normalizeRows([{ Email: ' ALICE@example.com ', Name: 'Alice' }])[0].email).toBe('alice@example.com');
   expect(() => normalizeRows([{ Email: 'bad' }])).toThrow('valid email');
-  expect(() => normalizeRows([{ Email: 'a@b.com' }, { email: 'A@B.COM' }])).toThrow('Duplicate');
-  expect(() => normalizeRows([])).toThrow('between 1 and 1000');
+  expect(normalizeRows([{ Email: 'a@b.com' }, { email: 'A@B.COM' }])).toHaveLength(1);
+  expect(() => normalizeRows([])).toThrow('between 1 and 10000');
+  const result = parseRecipientRows([{ 'Client name': 'Ignored', 'Client email\t': '-' }, { 'Client name': 'Alice', 'Client email\t': 'ALICE@example.com' }, { 'Client email': 'alice@example.com' }]);
+  expect(result.recipients).toHaveLength(1); expect(result.missingEmail).toBe(1); expect(result.duplicates).toBe(1);
+  expect(result.recipients[0]['Client name']).toBe('Alice');
+  expect(normalizeRows(Array.from({ length: 1121 }, (_, i) => ({ 'Client email': `client${i}@example.com` })))).toHaveLength(1121);
+});
+test('lead-format imports, branded templates, and numeric chunk controls are included in the campaign', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await mockApi(page); await loginState(page);
+  await page.route('**/templates/getAll/names', route => route.fulfill({ json: [{ _id: 'event-template', templateName: 'Introducing event Transportation', templatePurpose: 'Introduce transportation services' }], headers: { 'Access-Control-Allow-Origin': '*' } }));
+  await page.route('**/templates/getById/event-template', route => route.fulfill({ json: { emailSubject: 'Introducing Event Transportation', emailBody: 'Hi {{Client Name}},\n\nOur transportation services are available.', emailClosing: 'Best regards,\nJames Cooper', emailSignatureId: 'event-transportation', templatePurpose: 'Introduce transportation services' }, headers: { 'Access-Control-Allow-Origin': '*' } }));
+  await page.route('**/email/preview', route => route.fulfill({ json: { emailContent: { subject: 'Introducing Event Transportation', body: 'Hi Alice,\n\nOur transportation services are available.', closing: 'Best regards,\nJames Cooper' }, missingFields: [], signature: { url: 'http://localhost:3000/email/assets/event-transportation-signature.png', alt: 'Event Transportation signature' } }, headers: { 'Access-Control-Allow-Origin': '*' } }));
+  await page.route('**/email/assets/event-transportation-signature.png', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300"><rect width="600" height="300" fill="#39205c"/></svg>' }));
+  let payload: Record<string, unknown> = {};
+  await page.route('**/campaigns/create', async route => { payload = route.request().postDataJSON(); await route.fulfill({ status: 201, json: { campaign: { _id: 'chunked-campaign' } }, headers: { 'Access-Control-Allow-Origin': '*' } }); });
+  await page.route('**/campaigns/chunked-campaign/process', route => route.fulfill({ json: { campaign: { status: 'sending' }, message: 'Next chunk scheduled' }, headers: { 'Access-Control-Allow-Origin': '*' } }));
+  await page.goto('/email-campaigns'); await page.getByRole('button', { name: 'New campaign' }).click();
+  await page.getByRole('textbox', { name: 'Campaign name' }).fill('Event Transportation leads');
+  await page.getByRole('textbox', { name: 'Description', exact: true }).fill('Lead-format import');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.locator('input[type=file]').setInputFiles({ name: 'bash-leads.csv', mimeType: 'text/csv', buffer: Buffer.from('Gig ID,Client name,Client email\t\n1,Ignored,-\n2,Alice,alice@example.com\n3,Alice again,ALICE@example.com\n4,Bob,bob@example.com') });
+  await expect(page.getByText('2 recipients', { exact: false }).first()).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Skipped 1 rows without an email and 1 duplicate addresses' })).toBeVisible();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.locator('.ant-select-selector').click();
+  await page.locator('.ant-select-item-option-content').filter({ hasText: 'Introducing event Transportation' }).click();
+  await expect(page.getByRole('checkbox', { name: 'Include Event Transportation signature and logo' })).toBeChecked();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.getByLabel('Personalized email preview')).toContainText('Hi Alice,');
+  await expect(page.getByRole('img', { name: 'Event Transportation signature', exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Send emails in chunks' }).check();
+  await page.getByRole('spinbutton', { name: 'Emails per chunk' }).fill('100');
+  await page.getByRole('spinbutton', { name: 'Gap between chunks' }).fill('10');
+  await noOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('chunk-settings-mobile.png'), fullPage: true, animations: 'disabled' });
+  await page.getByRole('dialog').getByRole('button', { name: 'Send now', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(payload.chunkSize).toBe(100); expect(payload.chunkGapSeconds).toBe(600);
+  expect(payload.emailSignatureId).toBe('event-transportation'); expect(payload.recipients).toHaveLength(2);
 });
 for (const width of [320, 375, 768, 1024, 1440, 1920]) {
   test(`responsive navigation and layouts at ${width}px`, async ({ page }, testInfo) => {
