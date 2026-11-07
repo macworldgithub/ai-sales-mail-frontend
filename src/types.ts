@@ -11,6 +11,8 @@ export interface Campaign {
   chunkGapSeconds?: number | null;
   currentChunk?: number;
   nextChunkAt?: string | null;
+  canRetryRejected?: boolean;
+  smtpHold?: { until: string; reason: string };
   totalEmailSent: number;
   totalEmailOpened: number;
   totalEmailReplied: number;

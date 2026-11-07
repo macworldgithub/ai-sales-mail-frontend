@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Table, Button, Input, Tag, Typography, Alert, Space } from 'antd';
+import { Table, Button, Input, Tag, Typography, Alert, Space, Popconfirm } from 'antd';
+import toast from 'react-hot-toast';
 import type { TableColumnsType } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import CreateCampaignModal from '../../components/CampaignModal';
@@ -40,14 +41,48 @@ export default function EmailCampaigns() {
     catch (error) { setError(errorMessage(error)); }
     finally { setProcessing(null); reload(); }
   }
+  async function retryRejected(campaign: Campaign) {
+    setProcessing(campaign._id); setError('');
+    try {
+      const { data } = await api.post(`/campaigns/${campaign._id}/retry-rejected`);
+      toast.success(data.message);
+    } catch (error) { setError(errorMessage(error)); }
+    finally { setProcessing(null); reload(); }
+  }
   const columns: TableColumnsType<Campaign> = [
     { title: 'Campaign', dataIndex: 'campaignName', width: 220 },
     { title: 'Status', width: 200, render: (_, record) => <><Tag color={record.status === 'sent' ? 'green' : ['attention', 'failed'].includes(record.status) ? 'red' : 'blue'}>{record.status.toUpperCase()}</Tag>{record.lastDeliveryError && <div className="mt-2 text-xs text-red-700">{record.lastDeliveryError}</div>}</> },
-    { title: 'Send time', width: 240, render: (_, record) => <>{displaySendTime(record.scheduledAt)}{record.chunkSize && <div className="mt-2 text-xs">{record.chunkSize} per chunk · {record.chunkGapSeconds}s gap{record.status !== 'sent' && record.nextChunkAt && <div>Next chunk: {displaySendTime(record.nextChunkAt)}</div>}</div>}</> },
+    { title: 'Send time', width: 240, render: (_, record) => {
+      const active = ['queued', 'scheduled', 'sending'].includes(record.status);
+      const nextChunk = record.nextChunkAt && new Date(record.nextChunkAt).getTime() > Date.now();
+      return <>
+        {active && displaySendTime(record.scheduledAt)}
+        {record.chunkSize && <div className="mt-2 text-xs">{record.chunkSize} per chunk · {record.chunkGapSeconds}s gap
+          {active && nextChunk && <div>Next chunk: {displaySendTime(record.nextChunkAt)}</div>}
+        </div>}
+        {record.smtpHold && <div className="mt-2 text-xs text-amber-800">
+          <div>SMTP paused until {displaySendTime(record.smtpHold.until)}</div>
+          <div>{record.smtpHold.reason}</div>
+        </div>}
+      </>;
+    } },
     { title: 'Emails sent', dataIndex: 'totalEmailSent', width: 100 },
     { title: 'Open rate', width: 100, render: (_, record) => `${openRate(record.totalEmailOpened, record.totalEmailSent).toFixed(1)}%` },
     { title: 'Replies', dataIndex: 'totalEmailReplied', width: 80 },
-    { title: 'Actions', width: 360, render: (_, record) => <Space wrap>{['queued', 'scheduled'].includes(record.status) && !record.totalEmailSent && <Button onClick={() => setScheduleCampaign(record)}>Change send time</Button>}{['queued', 'sending'].includes(record.status) && (!record.scheduledAt || new Date(record.scheduledAt).getTime() <= Date.now()) && <Button type="primary" loading={processing === record._id} disabled={(!!processing && processing !== record._id) || !!(record.nextChunkAt && new Date(record.nextChunkAt).getTime() > Date.now())} onClick={() => sendNow(record)}>Send now</Button>}<Button onClick={() => { setSelected(record); setMode('reply'); }}>{record.isAutomatedReply ? 'Edit reply' : 'Automate reply'}</Button><Button onClick={() => { setSelected(record); setMode('followUp'); }}>{record.hasFollowUp ? 'Edit follow-up' : 'Schedule follow-up'}</Button></Space> },
+    { title: 'Actions', width: 360, render: (_, record) => <Space wrap>
+      {['queued', 'scheduled'].includes(record.status) && !record.totalEmailSent && <Button onClick={() => setScheduleCampaign(record)}>Change send time</Button>}
+      {['queued', 'sending'].includes(record.status) && (!record.scheduledAt || new Date(record.scheduledAt).getTime() <= Date.now()) &&
+        <Button type="primary" loading={processing === record._id}
+          disabled={!!processing || !!record.smtpHold || !!(record.nextChunkAt && new Date(record.nextChunkAt).getTime() > Date.now())}
+          onClick={() => sendNow(record)}>Send now</Button>}
+      {record.canRetryRejected && <Popconfirm title="Retry rejected messages?"
+        description="Check that your mailbox can send again. This queues eligible rejected messages using the campaign’s chunk settings."
+        okText="Queue retry" onConfirm={() => retryRejected(record)}>
+        <Button loading={processing === record._id} disabled={!!processing || !!record.smtpHold}>Retry rejected</Button>
+      </Popconfirm>}
+      <Button onClick={() => { setSelected(record); setMode('reply'); }}>{record.isAutomatedReply ? 'Edit reply' : 'Automate reply'}</Button>
+      <Button onClick={() => { setSelected(record); setMode('followUp'); }}>{record.hasFollowUp ? 'Edit follow-up' : 'Schedule follow-up'}</Button>
+    </Space> },
   ];
   return <>
     <div className="page-heading"><div><Typography.Title level={2}>Email campaigns</Typography.Title><Typography.Text type="secondary">Create personalized outreach and keep the conversation going.</Typography.Text></div><Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>New campaign</Button></div>

@@ -159,6 +159,30 @@ test('expired session redirects to sign in', async ({ page }) => {
   await expect(page).toHaveURL(/\/auth\/login$/);
 });
 
+test('a stopped campaign hides stale chunk times and retries only after confirmation', async ({ page }) => {
+  await mockApi(page); await loginState(page);
+  const stopped = {
+    ...campaigns[0], status: 'attention', canRetryRejected: true,
+    chunkSize: 50, chunkGapSeconds: 1200, nextChunkAt: '2020-01-01T00:00:00Z',
+  };
+  let queued = false;
+  const headers = { 'Access-Control-Allow-Origin': '*' };
+  await page.route('**/campaigns/getAll**', route => route.fulfill({
+    json: { campaigns: [{ ...stopped, canRetryRejected: !queued }], total: 1 }, headers,
+  }));
+  await page.route('**/campaigns/*/retry-rejected', route => {
+    queued = true;
+    return route.fulfill({ status: 202, json: { message: 'Queued 1 rejected message for retry.' }, headers });
+  });
+  await page.goto('/email-campaigns');
+  await page.getByRole('button', { name: 'Retry rejected', exact: true }).click();
+  expect(queued).toBe(false);
+  await expect(page.getByText('Next chunk:', { exact: false })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Queue retry', exact: true }).click();
+  await expect(page.getByText('Queued 1 rejected message for retry.')).toBeVisible();
+  expect(queued).toBe(true);
+});
+
 test('review shows the server-rendered email for each recipient, including missing details', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await mockApi(page); await loginState(page);

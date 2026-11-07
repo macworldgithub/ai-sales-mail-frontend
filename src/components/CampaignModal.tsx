@@ -159,7 +159,12 @@ export default function CreateCampaignModal({ visible, onClose, onCreated }: Pro
         <ChunkSettings value={chunks} onChange={setChunks} recipients={rows.length} />
         <Spin spinning={previewLoading}><div className="email-preview" aria-label="Personalized email preview">{preview ? <><strong>{preview.subject}</strong><p className="my-4">{preview.body}</p><p>{preview.closing}</p>{previewSignature && <img src={previewSignature.url} alt={previewSignature.alt} width={600} height={300} style={{ display: 'block', maxWidth: '100%', width: 600, height: 'auto', marginTop: 16 }} />}</> : <Typography.Text type="secondary">Preparing recipient preview…</Typography.Text>}</div></Spin>
       </>}
-      <div className="modal-actions"><Button onClick={() => step > 0 ? setStep(value => value - 1) : onClose()} disabled={loading}>{step ? 'Back' : 'Cancel'}</Button>{step < 3 ? <Button type="primary" onClick={next}>Next</Button> : <Button type="primary" onClick={send} loading={loading} disabled={!preview || previewLoading || !!previewError}>{sendLater ? 'Schedule campaign' : 'Send now'}</Button>}</div>
+      <div className="modal-actions">
+        <Button onClick={() => step > 0 ? setStep(value => value - 1) : onClose()} disabled={loading}>{step ? 'Back' : 'Cancel'}</Button>
+        {step < 3 ? <Button type="primary" onClick={next}>Next</Button> :
+          <Button type="primary" aria-label={sendLater ? 'Schedule campaign' : 'Send now'} onClick={send} loading={loading}
+            disabled={!preview || previewLoading || !!previewError}>{sendLater ? 'Schedule campaign' : 'Send now'}</Button>}
+      </div>
     </Form></Spin>
   </Modal>;
 }
