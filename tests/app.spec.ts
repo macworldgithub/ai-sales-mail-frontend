@@ -106,6 +106,32 @@ test('search filters campaigns on the server', async ({ page }) => {
   await expect(page.getByRole('cell', { name: 'Product launch', exact: true })).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'Winter update', exact: true })).toBeVisible();
 });
+
+test('campaign recipients show delivery statuses and can be filtered and refreshed', async ({ page }) => {
+  await mockApi(page);
+  await loginState(page);
+  let refreshed = false;
+  await page.route(`**/campaigns/${campaigns[1]._id}/recipients`, route => route.fulfill({
+    json: { recipients: [
+      { email: 'sent@example.com', status: 'sent', sentAt: '2025-01-01T00:00:00Z' },
+      { email: 'retry@example.com', status: refreshed ? 'sent' : 'retrying', sentAt: refreshed ? '2025-01-02T00:00:00Z' : null },
+      { email: 'waiting@example.com', status: 'waiting', sentAt: null },
+    ] },
+    headers: { 'Access-Control-Allow-Origin': '*' },
+  }));
+  await page.goto('/email-campaigns');
+  await page.getByRole('row', { name: /Winter update/ }).getByRole('button', { name: 'View recipients' }).click();
+  const dialog = page.getByRole('dialog', { name: /Recipient delivery.*Winter update/ });
+  await expect(dialog.getByRole('row', { name: /sent@example.com Sent/ })).toBeVisible();
+  await expect(dialog.getByRole('row', { name: /retry@example.com Retrying/ })).toBeVisible();
+  await expect(dialog.getByRole('row', { name: /waiting@example.com Waiting/ })).toBeVisible();
+  await dialog.getByRole('combobox', { name: 'Filter by delivery status' }).click();
+  await page.getByText('Retrying (1)', { exact: true }).click();
+  await expect(dialog.getByText('waiting@example.com')).toHaveCount(0);
+  refreshed = true;
+  await dialog.getByRole('button', { name: 'Refresh recipients' }).click();
+  await expect(dialog.getByText('No matching recipients')).toBeVisible();
+});
 test('failed automation save stays open and reports the error', async ({ page }) => {
   await mockApi(page); await loginState(page);
   await page.route('**/automated-reply/enableAutomation', route => route.fulfill({ status: 500, json: { message: 'Could not save automation' }, headers: { 'Access-Control-Allow-Origin': '*' } }));

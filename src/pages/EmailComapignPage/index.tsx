@@ -6,6 +6,7 @@ import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import CreateCampaignModal from '../../components/CampaignModal';
 import AutomationModal from '../../components/AutomationModal';
 import ScheduleModal from '../../components/ScheduleModal';
+import RecipientDeliveryModal from '../../components/RecipientDeliveryModal';
 import { displaySendTime } from '../../utils/schedule';
 import { processCampaign } from '../../utils/delivery';
 import { api, errorMessage } from '../../config';
@@ -23,6 +24,7 @@ export default function EmailCampaigns() {
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [scheduleCampaign, setScheduleCampaign] = useState<Campaign | null>(null);
+  const [recipientCampaign, setRecipientCampaign] = useState<Campaign | null>(null);
   const [processing, setProcessing] = useState<string | null>(null);
   useEffect(() => { const timer = setTimeout(() => { setQuery(search); setPage(1); }, 300); return () => clearTimeout(timer); }, [search]);
   const reload = useCallback(() => setRefresh(value => value + 1), []);
@@ -70,6 +72,7 @@ export default function EmailCampaigns() {
     { title: 'Open rate', width: 100, render: (_, record) => `${openRate(record.totalEmailOpened, record.totalEmailSent).toFixed(1)}%` },
     { title: 'Replies', dataIndex: 'totalEmailReplied', width: 80 },
     { title: 'Actions', width: 360, render: (_, record) => <Space wrap>
+      <Button onClick={() => setRecipientCampaign(record)}>View recipients</Button>
       {['queued', 'scheduled'].includes(record.status) && !record.totalEmailSent && <Button onClick={() => setScheduleCampaign(record)}>Change send time</Button>}
       {['queued', 'sending'].includes(record.status) && (!record.scheduledAt || new Date(record.scheduledAt).getTime() <= Date.now()) &&
         <Button type="primary" loading={processing === record._id}
@@ -92,5 +95,7 @@ export default function EmailCampaigns() {
     {createOpen && <CreateCampaignModal visible onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); setPage(1); reload(); }} />}
     {selected && <AutomationModal key={`${selected._id}-${mode}`} campaign={selected} mode={mode} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); reload(); }} />}
     {scheduleCampaign && <ScheduleModal campaign={scheduleCampaign} onClose={() => setScheduleCampaign(null)} onSaved={() => { setScheduleCampaign(null); reload(); }} />}
+    {recipientCampaign && <RecipientDeliveryModal key={recipientCampaign._id} campaignId={recipientCampaign._id}
+      campaignName={recipientCampaign.campaignName} onClose={() => setRecipientCampaign(null)} />}
   </>;
 }
