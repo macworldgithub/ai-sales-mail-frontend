@@ -125,7 +125,7 @@ test('campaign recipients show delivery statuses and can be filtered and refresh
   await expect(dialog.getByRole('row', { name: /sent@example.com Sent/ })).toBeVisible();
   await expect(dialog.getByRole('row', { name: /retry@example.com Retrying/ })).toBeVisible();
   await expect(dialog.getByRole('row', { name: /waiting@example.com Waiting/ })).toBeVisible();
-  await dialog.getByRole('combobox', { name: 'Filter by delivery status' }).click();
+  await dialog.getByText('All statuses (3)', { exact: true }).click();
   await page.getByText('Retrying (1)', { exact: true }).click();
   await expect(dialog.getByText('waiting@example.com')).toHaveCount(0);
   refreshed = true;
